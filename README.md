@@ -23,6 +23,7 @@ npm install playpeerjs
 import PlayPeer from 'playpeerjs';
 
 // Create a new instance
+// Note: In production, always try...catch all promises
 const peer = new PlayPeer('unique-peer-id'); // It's recommended to pass an iceConfig here
 
 // Set up event handlers
@@ -31,27 +32,19 @@ peer.onEvent('error', error => console.error('Error:', error));
 peer.onEvent('storageUpdate', storage => console.log('Storage update received:', storage));
 
 // Initialize the peer
-try {
-    await peer.init();
-} catch (error) {
-    console.error("Peer failed to initialize:", error);
-}
+await peer.init();
 
 // Create a new room
-const hostId = peer.createRoom({
+const hostId = await peer.createRoom({
     players: [],
     gameState: 'waiting',
     gameLength: 60,
 });
 
 // Or, join room
-try {
-    await peer.joinRoom('host-peer-id'); // Times out after 2s if connection fails
-    const currentState = peer.getStorage();
-    peer.updateStorage('players', [...(currentState.players || []), newPlayer]);
-} catch (error) {
-    console.error('Failed to join room:', error);
-}
+await peer.joinRoom('host-peer-id'); // Times out after 2s if connection fails
+const currentState = peer.getStorage();
+peer.updateStorage('players', [...(currentState.players || []), newPlayer]);
 ```
 
 ## API Reference

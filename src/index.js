@@ -87,23 +87,32 @@ export default class PlayPeer {
             this.#triggerEvent("status", "Initializing new instance...");
 
             try {
-                this.#peer = new Peer(this.id, {
-                    config: this.#options || {
-                        'iceServers': [
-                            { urls: "stun:stun.l.google.com:19302" }
-                        ]
-                    }
-                });
+                this.#peer = new Peer(this.id, this.#options);
             } catch (error) {
                 console.error(ERROR_PREFIX + "Failed to initialize peer:", error);
                 this.#triggerEvent("error", "Failed to initialize peer: " + error);
-                reject("Failed to initialize peer.");
+                reject(new Error("Failed to initialize peer."));
                 return;
             }
 
-            this.#setupPeerEventListeners(); // Attach regular peer event listeners
+            this.#setupPeerErrorListeners(); // Attach event listeners
             this.#peer.on('connection', this.#handleIncomingConnections.bind(this)); // Attach host logic (on-connection listener)
-            resolve();
+
+            // Wait for signalling server connection to open
+            let connectionOpenTimeout;
+
+            connectionOpenTimeout = setTimeout(() => {
+                console.error(ERROR_PREFIX + "Connection attempt to signalling server timed out.");
+                this.#triggerEvent("error", "Connection attempt to singalling server timed out.");
+                this.destroy();
+                reject(new Error("Connection attempt to signalling server timed out."));
+            }, 1000);
+
+            this.#peer.on('open', () => {
+                this.#triggerEvent("status", "Connected to signalling server!");
+                clearTimeout(connectionOpenTimeout);
+                resolve();
+            });
         });
     }
 
@@ -111,9 +120,9 @@ export default class PlayPeer {
      * Set up peer event listeners that refernece the own, internal peer
      * @private
      */
-    #setupPeerEventListeners() {
+    #setupPeerErrorListeners() {
         this.#peer.on('disconnected', () => {
-            if (!this.#peer?.destroyed) {
+            if (this.#peer && !this.#peer?.destroyed) {
                 try {
                     this.#peer.reconnect();
                     console.warn(WARNING_PREFIX + "Disconnected from signalling server. Attempting to reconnect.");
@@ -154,12 +163,13 @@ export default class PlayPeer {
                 try {
                     incomingConnection.close();
                     this.#hostConnections.delete(incomingConnection);
-                    console.warn(WARNING_PREFIX + `Connection ${incomingConnection.peer} closed - no response (or not host).`);
+                    if (this.#isHost) console.warn(WARNING_PREFIX + `Connection ${incomingConnection.peer} closed - no response.`);
+                    if (!this.#isHost) console.warn(WARNING_PREFIX + `Connection ${incomingConnection.peer} closed - you are not hosting.`);
                 } catch (error) {
                     console.error(WARNING_PREFIX + "Error closing invalid connection:", error);
                 }
             }
-        }, 1000);
+        }, 10 * 1000);
 
         // Only process incoming connections if hosting
         if (this.#isHost) {
@@ -224,12 +234,20 @@ export default class PlayPeer {
     /**
      * Create room and become host
      * @param {object} initialStorage Initial storage object
-     * @returns {string} Peer id
+     * @returns {Promise} Promise resolves with peer id
      */
     createRoom(initialStorage = {}) {
-        this.#isHost = true;
-        this.#storage = initialStorage;
-        return this.id;
+        if (!this.#peer) {
+            this.#triggerEvent("error", "Cannot create room if peer is not initialized.");
+            console.error(ERROR_PREFIX + "Cannot create room if peer is not initialized.");
+            reject(new Error("Failed to initialize peer."));
+        }
+        return new Promise((resolve) => {
+            this.#isHost = true;
+            this.#storage = initialStorage;
+            this.#triggerEvent("status", "Room created.");
+            resolve(this.id);
+        });
     }
 
     /**
@@ -238,6 +256,11 @@ export default class PlayPeer {
      */
     async joinRoom(hostId) {
         return new Promise((resolve, reject) => {
+            if (!this.#peer) {
+                this.#triggerEvent("error", "Cannot join room if peer is not initialized.");
+                console.error(ERROR_PREFIX + "Cannot join room if peer is not initialized.");
+                reject(new Error("Failed to initialize peer."));
+            }
             try {
                 if (this.#isHost) console.warn(WARNING_PREFIX + "This instance was previously a host - reuse is discouraged.");
                 this.#isHost = false;
@@ -246,15 +269,17 @@ export default class PlayPeer {
                 this.#triggerEvent("status", "Attempting to connect to host...");
 
                 // Connection timeout
-                const timeout = setTimeout(() => {
-                    if (this.#outgoingConnection) {
+                let timeout;
+                clearTimeout(timeout);
+                timeout = setTimeout(() => {
+                    if (this.#outgoingConnection && !this.#outgoingConnection.open) {
                         this.#outgoingConnection.close();
                         this.#outgoingConnection = null;
                     }
-                    console.error(ERROR_PREFIX + "Connection attempt timed out.");
-                    this.#triggerEvent("status", "Connection attempt timed out.");
-                    reject(new Error("Connection attempt timed out."));
-                }, 2000);
+                    console.error(ERROR_PREFIX + "Connection attempt for joining room timed out.");
+                    this.#triggerEvent("status", "Connection attempt for joining room timed out.");
+                    reject(new Error("Connection attempt for joining room timed out."));
+                }, 10 * 1000);
 
                 const connectionOpened = false;
 
@@ -411,7 +436,7 @@ export default class PlayPeer {
             clearInterval(this.#heartbeatReceiveInterval);
 
             // Trigger events
-            this.#triggerEvent("status", "Instance destroyed.");
+            this.#triggerEvent("status", "Prev. instance cleaned up.");
             this.#triggerEvent("destroy");
         } catch (error) {
             console.error(ERROR_PREFIX + "Error during cleanup:", error);
