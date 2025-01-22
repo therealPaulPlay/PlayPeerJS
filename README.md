@@ -23,19 +23,19 @@ npm install playpeerjs
 import PlayPeer from 'playpeerjs';
 
 // Create a new instance
-try {
-    const peer = new PlayPeer('unique-peer-id'); // It's recommended to pass an iceConfig here
-} catch (error) {
-    console.error("Peer failed to initialize:", error);
-}
+const peer = new PlayPeer('unique-peer-id'); // It's recommended to pass an iceConfig here
 
 // Set up event handlers
 peer.onEvent('status', status => console.log('Status:', status));
 peer.onEvent('error', error => console.error('Error:', error));
-peer.onEvent('storageUpdate', storage => console.log('Storage updated:', storage));
+peer.onEvent('storageUpdate', storage => console.log('Storage update received:', storage));
 
 // Initialize the peer
-await peer.init();
+try {
+    await peer.init();
+} catch (error) {
+    console.error("Peer failed to initialize:", error);
+}
 
 // Create a new room
 const hostId = peer.createRoom({
