@@ -48,7 +48,7 @@ const hostId = peer.createRoom({
 try {
     await peer.joinRoom('host-peer-id'); // Times out after 2s if connection fails
     const currentState = peer.getStorage();
-    peer.updateStorage('players', [...currentState.players, newPlayer]);
+    peer.updateStorage('players', [...(currentState.players || []), newPlayer]);
 } catch (error) {
     console.error('Failed to join room:', error);
 }
