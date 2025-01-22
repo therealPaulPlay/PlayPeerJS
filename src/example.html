@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>PlayPeer Chat Example</title>
+
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <!-- !TODO add cdn link -->
+    <script src="https://unpkg.com/playpeer..."></script>
+
+    <style>
+        #messages {
+            height: 300px;
+            border: 1px solid #ccc;
+            overflow-y: scroll;
+            margin-bottom: 10px;
+            padding: 10px;
+        }
+
+        #chatInput {
+            width: 80%;
+            padding: 5px;
+        }
+
+        .controls {
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="controls">
+        <input type="text" id="peerId" placeholder="Your ID">
+        <button onclick="host()">Host Room</button>
+        <input type="text" id="hostId" placeholder="Host ID">
+        <button onclick="join()">Join Room</button>
+    </div>
+
+    <div id="messages"></div>
+    <input type="text" id="chatInput" placeholder="Type message...">
+    <button onclick="sendMessage()">Send</button>
+
+    <script type="module">
+        import PlayPeer from './index.js';
+
+        let peer;
+
+        async function initPeer(id) {
+            peer = new PlayPeer(id);
+
+            peer.onEvent('storageUpdate', (storage) => {
+                const messages = document.getElementById('messages');
+                messages.innerHTML = storage.messages?.map(msg =>
+                    `<div><strong>${msg.sender}:</strong> ${msg.text}</div>`
+                ).join('') || '';
+                messages.scrollTop = messages.scrollHeight;
+            });
+
+            peer.onEvent('status', status => console.log('Status:', status));
+            peer.onEvent('error', error => console.error('Error:', error));
+
+            await peer.init();
+        }
+
+        async function host() {
+            const id = document.getElementById('peerId').value;
+            if (!id) return alert('Please enter your ID');
+
+            await initPeer(id);
+            peer.createRoom({ messages: [] });
+            alert(`Room created! Your host ID is: ${id}`);
+        }
+
+        async function join() {
+            const id = document.getElementById('peerId').value;
+            const hostId = document.getElementById('hostId').value;
+            if (!id || !hostId) return alert('Please enter both IDs');
+
+            try {
+                await initPeer(id);
+                await peer.joinRoom(hostId);
+            } catch (error) {
+                alert('Failed to join: ' + error.message);
+            }
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('chatInput');
+            const text = input.value.trim();
+            if (!text) return;
+
+            const currentStorage = peer.getStorage();
+            const newMessage = {
+                sender: peer.id,
+                text: text,
+                time: Date.now()
+            };
+
+            peer.updateStorage('messages', [
+                ...(currentStorage.messages || []),
+                newMessage
+            ]);
+
+            input.value = '';
+        }
+
+        // Make functions globally available
+        window.host = host;
+        window.join = join;
+        window.sendMessage = sendMessage;
+
+        // Enter key to send
+        document.getElementById('chatInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+    </script>
+</body>
+
+</html>

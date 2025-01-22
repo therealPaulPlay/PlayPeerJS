@@ -1,0 +1,30 @@
+{
+  "name": "playpeerjs",
+  "version": "1.0.0",
+  "description": "WebRTC-based wrapper for creating robust peer-2-peer multiplayer systems with ease.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/therealPaulPlay/PlayPeerJS.git"
+  },
+  "keywords": [
+    "Peer2Peer",
+    "WebRTC",
+    "data",
+    "channel",
+    "multiplayer",
+    "game"
+  ],
+  "author": "PaulPlay",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/therealPaulPlay/PlayPeerJS/issues"
+  },
+  "homepage": "https://github.com/therealPaulPlay/PlayPeerJS#readme",
+  "dependencies": {
+    "peerjs": "^1.5.4"
+  }
+}
