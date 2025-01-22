@@ -21,7 +21,6 @@ export default class PlayPeer {
 
     // Heartbeat variables
     #heartbeatSendInterval;
-    #heartbeatReceiveInterval;
     #heartbeatReceived;
 
     /**
@@ -83,7 +82,8 @@ export default class PlayPeer {
     async init() {
         return new Promise((resolve, reject) => {
             this.destroy(); // If peer already exists, destroy
-            if (!this.id) console.warn(ERROR_PREFIX + "No id for the client provided!");
+            if (!this.id) console.warn(ERROR_PREFIX + "No id provided!");
+            if (!this.#options) console.warn(ERROR_PREFIX + "No config provided! Necessary stun and turn servers missing.");
             this.#triggerEvent("status", "Initializing new instance...");
 
             try {
@@ -161,10 +161,10 @@ export default class PlayPeer {
         setTimeout(() => {
             if (!incomingConnection.open || !this.#isHost) {
                 try {
-                    incomingConnection.close();
-                    this.#hostConnections.delete(incomingConnection);
                     if (this.#isHost) console.warn(WARNING_PREFIX + `Connection ${incomingConnection.peer} closed - no response.`);
                     if (!this.#isHost) console.warn(WARNING_PREFIX + `Connection ${incomingConnection.peer} closed - you are not hosting.`);
+                    incomingConnection.close();
+                    this.#hostConnections.delete(incomingConnection);
                 } catch (error) {
                     console.error(WARNING_PREFIX + "Error closing invalid connection:", error);
                 }
@@ -175,11 +175,6 @@ export default class PlayPeer {
         if (this.#isHost) {
             this.#triggerEvent("status", "New peer connected.");
             this.#hostConnections.add(incomingConnection);
-
-            this.#heartbeatSendInterval = setInterval(() => {
-                if (this.#isHost) this.#broadcastMessage("heartbeat");
-                if (!this.#isHost) clearInterval(this.#heartbeatSendInterval);
-            }, 500);
 
             incomingConnection.on('open', () => {
                 this.#triggerEvent("status", "Incoming connection opened.");
@@ -193,7 +188,7 @@ export default class PlayPeer {
                 try {
                     incomingConnection.send({ type: 'storage_sync', storage: this.#storage });
                 } catch (error) {
-                    console.error(WARNING_PREFIX + "Error sending initial storage sync:", error);
+                    console.error(ERROR_PREFIX + "Error sending initial storage sync:", error);
                     this.#triggerEvent("error", "Error sending initial storage sync: " + error);
                 }
             });
@@ -209,6 +204,16 @@ export default class PlayPeer {
                             this.#broadcastMessage("storage_sync", { storage: this.#storage });
                         }
                         break;
+                    case 'heartbeat_request': {
+                        // Respond to peers requesting heartbeat
+                        try {
+                            incomingConnection.send({ type: "heartbeat_response" });
+                        } catch (error) {
+                            console.error(ERROR_PREFIX + "Error responding to heartbeat:", error);
+                            this.#triggerEvent("error", "Error responding to heartbeat: " + error);
+                        }
+                        break;
+                    }
                 }
             });
 
@@ -237,7 +242,7 @@ export default class PlayPeer {
      * @returns {Promise} Promise resolves with peer id
      */
     createRoom(initialStorage = {}) {
-        if (!this.#peer) {
+        if (!this.#peer || this.#peer.destroyed) {
             this.#triggerEvent("error", "Cannot create room if peer is not initialized.");
             console.error(ERROR_PREFIX + "Cannot create room if peer is not initialized.");
             reject(new Error("Failed to initialize peer."));
@@ -256,7 +261,7 @@ export default class PlayPeer {
      */
     async joinRoom(hostId) {
         return new Promise((resolve, reject) => {
-            if (!this.#peer) {
+            if (!this.#peer || this.#peer.destroyed) {
                 this.#triggerEvent("error", "Cannot join room if peer is not initialized.");
                 console.error(ERROR_PREFIX + "Cannot join room if peer is not initialized.");
                 reject(new Error("Failed to initialize peer."));
@@ -281,29 +286,37 @@ export default class PlayPeer {
                     reject(new Error("Connection attempt for joining room timed out."));
                 }, 10 * 1000);
 
-                const connectionOpened = false;
-
                 this.#outgoingConnection.on("open", () => {
                     clearTimeout(timeout);
-                    connectionOpened = true;
                     this.#triggerEvent("outgoingPeerConnected", hostId);
                     this.#triggerEvent("status", "Connection to host established.");
 
-                    // Regularly check if heartbeats from host arrive
-                    this.#heartbeatReceived = false;
-                    this.#heartbeatReceiveInterval = setInterval(() => {
+                    // Regularly check if host responds to heartbeat
+                    this.#heartbeatReceived = true;
+                    this.#heartbeatSendInterval = setInterval(() => {
                         if (!this.#isHost) {
                             if (!this.#heartbeatReceived) {
-                                console.warn(WARNING_PREFIX + "Host did not send heartbeat multiple times - disconnecting from host.");
-                                this.#triggerEvent("status", "Host did not send heartbeat - disconnecting.");
-                                this.#outgoingConnection.close();
+                                console.warn(WARNING_PREFIX + "Host did not respond to heartbeat - disconnecting from host.");
+                                this.#triggerEvent("status", "Host did not respond to heartbeat - disconnecting.");
+                                this.#outgoingConnection?.close();
                                 return;
                             }
-                            this.#heartbeatReceived = false; // Reset, so that heartbeat needs to be set by host again
+
+                            // Ping host
+                            if (this.#outgoingConnection?.open) {
+                                this.#outgoingConnection?.send({
+                                    type: 'heartbeat_request'
+                                });
+                            }
                         } else {
-                            clearInterval(this.#heartbeatReceiveInterval);
+                            clearInterval(this.#heartbeatSendInterval);
                         }
-                    }, 750);
+                    }, 1000);
+
+                    // Only migrate host if the connection was initially open
+                    this.#outgoingConnection.on('close', () => {
+                        this.#migrateHost();
+                    });
 
                     resolve();
                 });
@@ -318,16 +331,16 @@ export default class PlayPeer {
                         case 'peer_list':
                             this.#hostConnectionsIdArray = data.peers;
                             break;
-                        case 'heartbeat':
+                        case 'heartbeat_response':
                             this.#heartbeatReceived = true;
                             break;
+
                     }
                 });
 
                 this.#outgoingConnection.on('close', () => {
                     this.#triggerEvent("outgoingPeerDisconnected", hostId);
                     this.#triggerEvent("status", "Connection to host closed.");
-                    if (connectionOpened) this.#migrateHost(); // Only migrate host if the connection was ever open
                 });
 
                 this.#outgoingConnection.on('error', (error) => {
@@ -356,13 +369,17 @@ export default class PlayPeer {
             this.#setStorageLocally(key, value);
             this.#broadcastMessage("storage_sync", { storage: this.#storage });
         } else {
-            this.#outgoingConnection?.send({
-                type: 'storage_update',
-                key,
-                value
-            });
-            // Optimistic update for non-host peers Ref: https://medium.com/@kyledeguzmanx/what-are-optimistic-updates-483662c3e171
-            this.#setStorageLocally(key, value);
+            try {
+                this.#outgoingConnection?.send({
+                    type: 'storage_update',
+                    key,
+                    value
+                });
+            } catch (error) {
+                console.error(ERROR_PREFIX + "Error sending storage update to host:", error);
+                this.#triggerEvent("error", "Error sending storage update to host: " + error);
+            }
+            this.#setStorageLocally(key, value); // Optimistic update for non-host peers Ref: https://medium.com/@kyledeguzmanx/what-are-optimistic-updates-483662c3e171
         }
     }
 
@@ -400,20 +417,21 @@ export default class PlayPeer {
      * @private
      */
     #migrateHost() {
+        this.#triggerEvent("status", "Starting host migration...");
         const connectedPeerIds = this.#hostConnectionsIdArray; // Get list of all known peers from host's connection list
         connectedPeerIds.sort(); // Sort ids to ensure selection is streamlined
 
         if (connectedPeerIds[0] === this.id) {
             // Become new host
             this.#isHost = true;
-            this.#triggerEvent("status", "Becoming new host...");
+            this.#triggerEvent("status", "This peer is now the host.");
             this.#outgoingConnection = null;
         } else {
             // Connect to new host
             this.#triggerEvent("status", "Attempting to connect to new host in 1s...");
             setTimeout(() => {
                 this.joinRoom(connectedPeerIds[0]); // Wait for new host to become the host first
-            }, 1000);
+            }, 1150);
         }
     }
 
@@ -433,7 +451,6 @@ export default class PlayPeer {
 
             // Clear intervals
             clearInterval(this.#heartbeatSendInterval);
-            clearInterval(this.#heartbeatReceiveInterval);
 
             // Trigger events
             this.#triggerEvent("status", "Prev. instance cleaned up.");

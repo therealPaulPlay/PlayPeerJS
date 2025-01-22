@@ -28,8 +28,8 @@
 
 <body>
     <div class="controls">
+        <p id="peerIdDisplay"></p>
         <div id="host-container">
-            <p id="peerIdDisplay"></p>
             <button onclick="host()">Host Room</button>
         </div>
         <br>
@@ -58,7 +58,14 @@
         document.getElementById('peerIdDisplay').textContent = `Your peer ID: ${peerId}`;
 
         async function initPeer(id) {
-            peer = new PlayPeer(id, { config: { 'iceServers': [{ urls: "stun:stun.l.google.com:19302" }] } });
+            peer = new PlayPeer(id, {
+                config: {
+                    'iceServers': [
+                        { urls: "stun:stun.l.google.com:19302" },
+                        { urls: 'turn:freestun.net:3478', username: 'free', credential: 'free' }, // For production, use fastturn, or a different turn server
+                    ]
+                }
+            });
 
             peer.onEvent('storageUpdate', (storage) => {
                 const messages = document.getElementById('messages');
@@ -80,7 +87,6 @@
 
             await initPeer(peerId);
             peer.createRoom({ messages: [] });
-            alert(`Room created! Your host ID is: ${peerId}`);
         }
 
         async function join() {

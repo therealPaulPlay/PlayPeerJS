@@ -19,12 +19,21 @@ npm install playpeerjs
 
 ## Usage
 
+Note that in production, you should **always try...catch** these promises, such as peer.init(), to ensure your application continues to run if errors occur.
+
 ```javascript
 import PlayPeer from 'playpeerjs';
 
 // Create a new instance
-// Note: In production, always try...catch all promises
-const peer = new PlayPeer('unique-peer-id'); // It's recommended to pass an iceConfig here
+const peer = new PlayPeer('unique-peer-id', {{
+    // Provide stun and turn servers here
+    config: {
+        'iceServers': [
+            { urls: "stun:your-stun-server.com" },
+            { urls: "turn:your-turn-server.com" },
+        ]
+    }
+}});
 
 // Set up event handlers
 peer.onEvent('status', status => console.log('Status:', status));
@@ -37,13 +46,11 @@ await peer.init();
 // Create a new room
 const hostId = await peer.createRoom({
     players: [],
-    gameState: 'waiting',
-    gameLength: 60,
 });
 
 // Or, join room
-await peer.joinRoom('host-peer-id'); // Times out after 2s if connection fails
-const currentState = peer.getStorage();
+await peer.joinRoom('host-peer-id'); // Rejects if connection fails or times out
+const currentState = peer.getStorage;
 peer.updateStorage('players', [...(currentState.players || []), newPlayer]);
 ```
 
