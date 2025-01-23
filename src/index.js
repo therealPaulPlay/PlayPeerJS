@@ -25,7 +25,7 @@ export default class PlayPeer {
     #heartbeatReceived;
 
     /**
-     * WebRTC Data Channels wrapper for handling multiplayer in games.
+     * WebRTC Data Channels wrapper for handling multiplayer in games
      * @constructor
      * @param {string} id - Unique id for signalling
      * @param {object} [options] - Peer options (ice config, host, port etc.)
@@ -36,7 +36,7 @@ export default class PlayPeer {
     }
 
     /** 
-     * Register an event callback.
+     * Register an event callback
      * @param {string} event - Event name (e.g., "incomingPeerConnected", "outgoingPeerError")
      * @param {function} callback - Callback function to register 
      */
@@ -76,9 +76,9 @@ export default class PlayPeer {
     }
 
     /**
-     * Initialize new multiplayer object.
+     * Initialize new multiplayer object
      * @async
-     * @returns {Promise} Async Initialization promise.
+     * @returns {Promise} - Async Initialization promise
     */
     async init() {
         return new Promise((resolve, reject) => {
@@ -239,8 +239,8 @@ export default class PlayPeer {
 
     /**
      * Create room and become host
-     * @param {object} initialStorage Initial storage object
-     * @returns {Promise} Promise resolves with peer id
+     * @param {object} initialStorage - Initial storage object
+     * @returns {Promise} - Promise resolves with peer id
      */
     createRoom(initialStorage = {}) {
         if (!this.#peer || this.#peer.destroyed) {
@@ -258,7 +258,7 @@ export default class PlayPeer {
 
     /**
      * Join existing room (Client code)
-     * @param {string} hostId Id of the host to connect to
+     * @param {string} hostId - Id of the host to connect to
      */
     async joinRoom(hostId) {
         return new Promise((resolve, reject) => {
@@ -397,7 +397,7 @@ export default class PlayPeer {
     }
 
     /**
-     * Broadcast a message of a specific type to all peers. Used by host only.
+     * Broadcast a message of a specific type to all peers. Used by host only
      * @private
      * @param {string} type - Message type (e.g., "storage_sync", "peer_list")
      * @param {object} [payload] - Additional data to send
