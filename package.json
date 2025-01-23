@@ -1,6 +1,6 @@
 {
   "name": "playpeerjs",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "WebRTC-based wrapper for creating robust peer-2-peer multiplayer systems with ease.",
   "type": "module",
   "main": "src/index.js",
@@ -30,7 +30,9 @@
   "devDependencies": {
     "@rollup/plugin-commonjs": "^28.0.2",
     "@rollup/plugin-node-resolve": "^16.0.0",
-    "peerjs": "^1.5.4",
     "rollup": "^4.31.0"
+  },
+  "dependencies": {
+    "peerjs": "^1.5.4"
   }
 }
