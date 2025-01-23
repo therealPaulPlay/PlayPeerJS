@@ -77,7 +77,7 @@ export default class PlayPeer {
     /**
      * Initialize new multiplayer object
      * @async
-     * @returns {Promise} - Async Initialization promise
+     * @returns {Promise} Async Initialization promise
     */
     async init() {
         return new Promise((resolve, reject) => {
@@ -239,7 +239,7 @@ export default class PlayPeer {
     /**
      * Create room and become host
      * @param {object} initialStorage - Initial storage object
-     * @returns {Promise} - Promise resolves with peer id
+     * @returns {Promise} Promise resolves with peer id
      */
     createRoom(initialStorage = {}) {
         if (!this.#peer || this.#peer.destroyed) {
@@ -364,8 +364,8 @@ export default class PlayPeer {
     /**
      * Update storage with new value
      * @public
-     * @param {string} key Storage key to update
-     * @param {*} value New value
+     * @param {string} key - Storage key to update
+     * @param {*} value - New value
      */
     updateStorage(key, value) {
         if (this.#isHost) {
@@ -478,7 +478,7 @@ export default class PlayPeer {
     }
 
     /**
-     *  @returns {number} - Number of active connections to the host
+     *  @returns {number} Number of active connections to the host
      */
     get connectionCount() {
         if (this.#isHost) return this.#hostConnections?.size || 0;
@@ -486,7 +486,7 @@ export default class PlayPeer {
     }
 
     /**
-     *  @returns {object} - Get storage object
+     *  @returns {object} Get storage object
      */
     get getStorage() {
         return this.#storage || {};
