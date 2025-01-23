@@ -84,7 +84,7 @@ export default class PlayPeer {
             this.destroy(); // If peer already exists, destroy
             if (!this.id) console.warn(ERROR_PREFIX + "No id provided!");
             if (!this.#options) console.warn(ERROR_PREFIX + "No config provided! Necessary stun and turn servers missing.");
-            this.#triggerEvent("status", "Initializing new instance...");
+            this.#triggerEvent("status", "Initializing instance...");
 
             try {
                 this.#peer = new Peer(this.id, this.#options);
@@ -245,7 +245,7 @@ export default class PlayPeer {
         if (!this.#peer || this.#peer.destroyed) {
             this.#triggerEvent("error", "Cannot create room if peer is not initialized.");
             console.error(ERROR_PREFIX + "Cannot create room if peer is not initialized.");
-            reject(new Error("Failed to initialize peer."));
+            reject(new Error("Peer not initialized."));
         }
         return new Promise((resolve) => {
             this.#isHost = true;
@@ -264,7 +264,7 @@ export default class PlayPeer {
             if (!this.#peer || this.#peer.destroyed) {
                 this.#triggerEvent("error", "Cannot join room if peer is not initialized.");
                 console.error(ERROR_PREFIX + "Cannot join room if peer is not initialized.");
-                reject(new Error("Failed to initialize peer."));
+                reject(new Error("Peer not initialized."));
             }
             try {
                 if (this.#outgoingConnection) this.#outgoingConnection.close(); // Close previous connection (if exists)

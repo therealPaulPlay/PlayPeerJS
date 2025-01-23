@@ -53,6 +53,9 @@ const hostId = await peer.createRoom({
 await peer.joinRoom('host-peer-id'); // Rejects if connection fails or times out
 const currentState = peer.getStorage;
 peer.updateStorage('players', [...(currentState.players || []), newPlayer]);
+
+// To leave the room, destroy the instance
+peer.destroy();
 ```
 
 ## API Reference
@@ -69,10 +72,10 @@ Creates a new PlayPeer instance with a specified peer ID and [PeerJS options](ht
 
 #### Core
 
-- `init()`: Initialize the peer connection - returns promise
-- `createRoom(initialStorage?: object)`: Create a new room and become host
-- `joinRoom(hostId: string)`: Join an existing room. Returns promise, rejects after 2s timeout
-- `destroy()`: Clean up and destroy the peer instance
+- `init()`: Initialize the peer connection (async)
+- `createRoom(initialStorage?: object)`: Create a new room and become host (async)
+- `joinRoom(hostId: string)`: Join an existing room. Returns promise, rejects after 2s timeout (async)
+- `destroy()`: Use this to leave a room. Destroys the peer instance
 
 #### State Management
 
