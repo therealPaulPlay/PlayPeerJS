@@ -170,10 +170,10 @@ export default class PlayPeer {
                     incomingConnection.close();
                     this.#hostConnections.delete(incomingConnection);
                 } catch (error) {
-                    console.error(WARNING_PREFIX + "Error closing invalid connection:", error);
+                    console.error(ERROR_PREFIX + "Error closing invalid connection:", error);
                 }
             }
-        }, 10 * 1000);
+        }, 3 * 1000);
 
         // Only process incoming connections if hosting
         if (this.#isHost) {
@@ -291,7 +291,7 @@ export default class PlayPeer {
                     console.error(ERROR_PREFIX + "Connection attempt for joining room timed out.");
                     this.#triggerEvent("status", "Connection attempt for joining room timed out.");
                     reject(new Error("Connection attempt for joining room timed out."));
-                }, 10 * 1000);
+                }, 3 * 1000);
 
                 this.#outgoingConnection.on("open", () => {
                     clearTimeout(timeout);
@@ -412,7 +412,7 @@ export default class PlayPeer {
                 try {
                     connection.send(message);
                 } catch (error) {
-                    console.error(WARNING_PREFIX + `Failed to send broadcast message to peer ${connection.peer}:`, error);
+                    console.error(ERROR_PREFIX + `Failed to send broadcast message to peer ${connection.peer}:`, error);
                     this.#triggerEvent("error", `Failed to send broadcast message to peer ${connection.peer}: ${error}`);
                 }
             }
