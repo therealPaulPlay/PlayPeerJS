@@ -39,7 +39,6 @@ const peer = new PlayPeer('unique-peer-id', {{
 
 // Set up event handlers
 peer.onEvent('status', status => console.log('Status:', status));
-peer.onEvent('error', error => console.error('Error:', error));
 peer.onEvent('storageUpdate', storage => console.log('Storage update received:', storage));
 
 // Initialize the peer
@@ -64,7 +63,7 @@ peer.updateStorage('players', [...(currentState.players || []), newPlayer]);
 new PlayPeer(id: string, options?: PeerJS.Options)
 ```
 
-Creates a new PlayPeer instance with a specified peer ID and [PeerJS configuration](https://peerjs.com/docs/#peer-options).
+Creates a new PlayPeer instance with a specified peer ID and [PeerJS options](https://peerjs.com/docs/#peer-options).
 
 ### Methods
 
