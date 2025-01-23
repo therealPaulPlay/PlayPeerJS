@@ -3,6 +3,10 @@ import { Peer } from 'peerjs';
 const ERROR_PREFIX = "PlayPeer error: ";
 const WARNING_PREFIX = "PlayPeer warning: ";
 
+/**
+ * @class
+ * @classdesc Integrate peer-2-peer multiplayer with ease
+ */
 export default class PlayPeer {
     // Config properties
     id;
