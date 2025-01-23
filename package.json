@@ -2,8 +2,9 @@
   "name": "playpeerjs",
   "version": "1.0.2",
   "description": "WebRTC-based wrapper for creating robust peer-2-peer multiplayer systems with ease.",
-  "main": "dist/playpeer.js",
-  "module": "dist/playpeer.js",
+  "type": "module",
+  "main": "src/index.js",
+  "module": "src/index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "rollup -c rollup.config.js"
