@@ -7,9 +7,11 @@ A WebRTC wrapper that simplifies peer-to-peer multiplayer game development by ab
 PlayPeer eliminates the traditional complexity of WebRTC multiplayer implementations:
 
 - **Simplified Architecture**: No need for separate server/client logic
-- **Automatic Host Migration**: Seamless host switching if the current host disconnects
+- **Automatic Host Migration**: Seamless host switching if the current – or any future – host disconnects
 - **State Synchronization**: Built-in storage system keeps game state synchronized across all peers
 - **Resilient Connections**: Automatic reconnection handling and connection health monitoring
+
+![Diagram explaining the difference](/resources/explanation.png)
 
 ## Installation
 
@@ -62,7 +64,7 @@ peer.updateStorage('players', [...(currentState.players || []), newPlayer]);
 new PlayPeer(id: string, options?: PeerJS.Options)
 ```
 
-Creates a new PlayPeer instance with the specified peer ID and optional [PeerJS configuration](https://peerjs.com/docs/#peer-options).
+Creates a new PlayPeer instance with a specified peer ID and [PeerJS configuration](https://peerjs.com/docs/#peer-options).
 
 ### Methods
 
@@ -100,6 +102,9 @@ Creates a new PlayPeer instance with the specified peer ID and optional [PeerJS 
 ## License
 
 MIT
+
+## Resources
+- [**What is WebRTC?**](https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API)
 
 ## Contributing
 

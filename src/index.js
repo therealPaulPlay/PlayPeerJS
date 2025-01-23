@@ -135,14 +135,14 @@ export default class PlayPeer {
         });
 
         this.#peer.on('error', (error) => {
-            if (error.type !== "network") {
-                console.error(ERROR_PREFIX + "Fatal peer error:", error);
-                this.#triggerEvent("error", "Fatal peer error: " + error);
-            } else {
+            if (error.type === "network") {
                 console.error(ERROR_PREFIX + "Fatal network error:", error);
                 this.#triggerEvent("error", "Fatal network error: " + error);
+                this.destroy();
+            } else {
+                console.error(ERROR_PREFIX + "Peer error:", error);
+                this.#triggerEvent("error", "Peer error: " + error);
             }
-            this.destroy();
         });
 
         this.#peer.on('close', () => {
@@ -267,11 +267,14 @@ export default class PlayPeer {
                 reject(new Error("Failed to initialize peer."));
             }
             try {
-                if (this.#isHost) console.warn(WARNING_PREFIX + "This instance was previously a host - reuse is discouraged.");
-                this.#isHost = false;
+                if (this.#outgoingConnection) this.#outgoingConnection.close(); // Close previous connection (if exists)
+                this.#outgoingConnection = this.#peer.connect(hostId, { reliable: true }); // Connect to host
+                this.#triggerEvent("status", "Connecting to host...");
 
-                this.#outgoingConnection = this.#peer.connect(hostId, { reliable: true });
-                this.#triggerEvent("status", "Attempting to connect to host...");
+                // In case peer experiences error joining room, reject promise
+                this.#peer.on('error', (error) => {
+                    reject(new Error("Error occured trying to join room: " + error));
+                });
 
                 // Connection timeout
                 let timeout;
@@ -414,25 +417,35 @@ export default class PlayPeer {
 
     /**
      * Handle host migration when current host disconnects
+     * @async
      * @private
      */
-    #migrateHost() {
+    async #migrateHost() {
         this.#triggerEvent("status", "Starting host migration...");
-        const connectedPeerIds = this.#hostConnectionsIdArray; // Get list of all known peers from host's connection list
-        connectedPeerIds.sort(); // Sort ids to ensure selection is streamlined
+        const connectedPeerIds = this.#hostConnectionsIdArray;
+        connectedPeerIds.sort();
 
-        if (connectedPeerIds[0] === this.id) {
-            // Become new host
-            this.#isHost = true;
-            this.#triggerEvent("status", "This peer is now the host.");
-            this.#outgoingConnection = null;
-        } else {
-            // Connect to new host
-            this.#triggerEvent("status", "Attempting to connect to new host in 1s...");
-            setTimeout(() => {
-                this.joinRoom(connectedPeerIds[0]); // Wait for new host to become the host first
-            }, 1150);
+        const migrateToHostIndex = async (index) => {
+            if (index >= connectedPeerIds.length) return;
+
+            if (connectedPeerIds[index] === this.id) {
+                this.#isHost = true;
+                this.#triggerEvent("status", `This peer (index ${index}) is now the host.`);
+                this.#outgoingConnection = null;
+            } else {
+                this.#triggerEvent("status", `Attempting to connect to new host (index ${index}) in 1s...`);
+                try {
+                    await new Promise(resolve => setTimeout(resolve, 1250));
+                    await this.joinRoom(connectedPeerIds[index]);
+                } catch (error) {
+                    this.#triggerEvent("error", "Error migrating host while connecting to new room: " + error);
+                    console.warn(WARNING_PREFIX + `Error migrating host (index ${index}) while connecting to new room:`, error);
+                    await migrateToHostIndex(index + 1);
+                }
+            }
         }
+
+        await migrateToHostIndex(0);
     }
 
     /**
@@ -440,7 +453,13 @@ export default class PlayPeer {
      */
     destroy() {
         try {
-            if (this.#peer && !this.#peer.destroyed) this.#peer.destroy();
+            if (this.#peer) {
+                if (!this.#peer?.destroyed) this.#peer.destroy();
+
+                // Trigger events
+                this.#triggerEvent("status", "Destroyed.");
+                this.#triggerEvent("destroy");
+            }
 
             // Resets
             this.#peer = undefined;
@@ -451,10 +470,7 @@ export default class PlayPeer {
 
             // Clear intervals
             clearInterval(this.#heartbeatSendInterval);
-
-            // Trigger events
-            this.#triggerEvent("status", "Prev. instance cleaned up.");
-            this.#triggerEvent("destroy");
+            this.#triggerEvent("status", "Resetted internal data.");
         } catch (error) {
             console.error(ERROR_PREFIX + "Error during cleanup:", error);
             this.#triggerEvent("error", "Error during cleanup: " + error);

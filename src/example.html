@@ -85,7 +85,7 @@
             document.getElementById("host-container").style.pointerEvents = "none";
             document.getElementById("host-container").style.opacity = "0.5";
 
-            await initPeer(peerId);
+            if (!peer) await initPeer(peerId);
             peer.createRoom({ messages: [] });
         }
 
@@ -97,7 +97,7 @@
             if (!hostId) return alert('Please enter the Room code (Host ID)');
 
             try {
-                await initPeer(peerId);
+                if (!peer) await initPeer(peerId);
                 await peer.joinRoom(hostId);
             } catch (error) {
                 alert('Failed to join: ' + error.message);
