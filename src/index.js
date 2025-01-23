@@ -1,4 +1,5 @@
-import { Peer } from "peerjs";
+import pkg from 'peerjs';
+const { Peer } = pkg;
 
 const ERROR_PREFIX = "PlayPeer error: ";
 const WARNING_PREFIX = "PlayPeer warning: ";
