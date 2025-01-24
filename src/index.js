@@ -58,7 +58,9 @@ export default class PlayPeer {
         ];
 
         if (!validEvents.includes(event)) return console.warn(WARNING_PREFIX + `Invalid event type "${event}" provided to onEvent.`);
-        this.#callbacks.set(event, callback);
+        if (!this.#callbacks.has(event)) this.#callbacks.set(event, []); // If not present, add event array
+
+        this.#callbacks.get(event).push(callback); // Push callback into array
     }
 
     /**
@@ -68,14 +70,16 @@ export default class PlayPeer {
      * @private
      */
     #triggerEvent(event, ...args) {
-        const callback = this.#callbacks.get(event);
-        if (!callback) return;
+        const callbacks = this.#callbacks.get(event);
+        if (!callbacks || callbacks.length === 0) return;
 
-        try {
-            callback(...args);
-        } catch (error) {
-            console.error(ERROR_PREFIX + `${event} callback error:`, error);
-        }
+        callbacks.forEach((callback) => {
+            try {
+                callback(...args);
+            } catch (error) {
+                console.error(ERROR_PREFIX + `${event} callback error:`, error);
+            }
+        });
     }
 
     /**
