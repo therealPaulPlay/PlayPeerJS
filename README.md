@@ -97,6 +97,10 @@ Creates a new PlayPeer instance with a specified peer ID and [PeerJS options](ht
 
 ### Properties
 
+The `id` is used to distinguish the peer from other peers on the signalling server. 
+Using a uuid is recommended, but it is also fine to use any other random string. If you're using a public signalling server instance, including
+your application's name in the `id` can help to prevent overlap (e.g. your-app-012345abcdef). 
+
 - `id`: Peer's unique identifier
 - `connectionCount`: Number of active peer connections (without you)
 - `getStorage`: Retrieve storage object
