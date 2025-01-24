@@ -16,9 +16,10 @@
   "keywords": [
     "Peer2Peer",
     "WebRTC",
-    "data",
-    "channel",
+    "data channel",
+    "PeerJS",
     "multiplayer",
+    "peer-peer",
     "game"
   ],
   "author": "PaulPlay",
