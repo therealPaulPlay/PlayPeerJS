@@ -343,7 +343,7 @@ export default class PlayPeer {
                     switch (data.type) {
                         case 'storage_sync':
                             this.#storage = data.storage;
-                            this.#triggerEvent("storageUpdate", this.#storage);
+                            this.#triggerEvent("storageUpdate", { ...this.#storage });
                             break;
                         case 'peer_list':
                             this.#hostConnectionsIdArray = data.peers;
@@ -406,7 +406,7 @@ export default class PlayPeer {
      */
     #setStorageLocally(key, value) {
         this.#storage[key] = value;
-        this.#triggerEvent("storageUpdate", this.#storage);
+        this.#triggerEvent("storageUpdate", { ...this.#storage });
     }
 
     /**
