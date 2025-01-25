@@ -264,6 +264,7 @@ export default class PlayPeer {
         return new Promise((resolve) => {
             this.#isHost = true;
             this.#storage = initialStorage;
+            this.#triggerEvent("storageUpdate", { ...this.#storage });
             this.#triggerEvent("status", "Room created.");
             resolve(this.id);
         });
