@@ -51,6 +51,8 @@ const hostId = await peer.createRoom({
 
 // Or, join room
 await peer.joinRoom('host-peer-id'); // Rejects if connection fails or times out
+
+// Interact with the synced storage
 const currentState = peer.getStorage;
 peer.updateStorageArray('players', 'add', { username: 'PeerEnjoyer4', level: 2 }); // Special method to enable simultaneous storage updates for arrays
 peer.updateStorage('latestPlayer', 'PeerEnjoyer4'); // Regular synced storage update
