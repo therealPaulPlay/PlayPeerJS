@@ -112,15 +112,10 @@
             const currentStorage = peer.getStorage;
             const newMessage = {
                 sender: peer.id,
-                text: text,
-                time: Date.now()
+                text: text
             };
 
-            peer.updateStorage('messages', [
-                ...(currentStorage.messages || []),
-                newMessage
-            ]);
-
+            peer.updateStorageArray('messages', 'add', newMessage);
             input.value = '';
         }
 

@@ -222,6 +222,12 @@ export default class PlayPeer {
                         }
                         break;
                     }
+                    case 'array_update': {
+                        // Perform array updates on host to avoid race conditions
+                        this.#handleArrayUpdate(data.key, data.operation, data.value, data.updateValue);
+                        this.#broadcastMessage("storage_sync", { storage: this.#storage });
+                        break;
+                    }
                 }
             });
 
@@ -401,6 +407,86 @@ export default class PlayPeer {
     #setStorageLocally(key, value) {
         this.#storage[key] = value;
         this.#triggerEvent("storageUpdate", this.#storage);
+    }
+
+    /**
+     * Handle dynamic array update
+     * @private
+     * @param {string} key 
+     * @param {string} operation 
+     * @param {*} value 
+     * @param {*} updateValue
+     */
+    #handleArrayUpdate(key, operation, value, updateValue) {
+        const updatedArray = this.#storage?.[key] || [];
+        if (!Array.isArray(this.#storage?.[key])) {
+            this.#storage[key] = []; // Ensure it's an array if it wasn't already
+        }
+
+        switch (operation) {
+            case 'add':
+                this.#storage[key].push(value);
+                break;
+
+            case 'remove-matching':
+                // Remove matching value (deep comparison for objects)
+                this.#storage[key] = updatedArray.filter(item => {
+                    if (typeof value === 'object' && value !== null) {
+                        return JSON.stringify(item) !== JSON.stringify(value);
+                    }
+                    return item !== value; // Strict equality for primitives
+                });
+                break;
+
+            case 'update-matching':
+                // Find and update the matching value (deep comparison for objects)
+                const updateIndex = updatedArray.findIndex(item => {
+                    if (typeof value === 'object' && value !== null) {
+                        return JSON.stringify(item) === JSON.stringify(value);
+                    }
+                    return item === value; // Strict equality for primitives
+                });
+
+                if (updateIndex > -1) {
+                    this.#storage[key][updateIndex] = updateValue; // Perform the update
+                }
+                break;
+
+            default:
+                console.error(ERROR_PREFIX + `Unknown array operation: ${operation}`);
+                this.#triggerEvent("error", `Unknown array operation: ${operation}`);
+        }
+
+        this.#setStorageLocally(key, this.#storage[key]); // Update storage locally
+    }
+
+    /**
+     * Safely update an array from a storage key
+     * @param {string} key 
+     * @param {string} operation 
+     * @param {*} value 
+     * @param {* | undefined} updateValue 
+     */
+    updateStorageArray(key, operation, value, updateValue) {
+        if (this.#isHost) {
+            this.#handleArrayUpdate(key, operation, value, updateValue);
+            this.#broadcastMessage("storage_sync", { storage: this.#storage });
+        } else {
+            try {
+                // Request the host to perform the operation
+                this.#outgoingConnection?.send({
+                    type: 'array_update',
+                    key,
+                    operation,
+                    value,
+                    updateValue
+                });
+                this.#handleArrayUpdate(key, operation, value, updateValue); // Optimistc update
+            } catch (error) {
+                console.error(ERROR_PREFIX + `Failed to send array update to host:`, error);
+                this.#triggerEvent("error", `Failed to send array update to host: ${error}`);
+            }
+        }
     }
 
     /**
