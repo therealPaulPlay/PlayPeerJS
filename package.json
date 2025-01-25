@@ -1,6 +1,6 @@
 {
   "name": "playpeerjs",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "WebRTC-based wrapper for creating robust peer-2-peer multiplayer systems with ease.",
   "type": "module",
   "main": "dist/playpeer.js",

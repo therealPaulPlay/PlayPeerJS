@@ -106,6 +106,7 @@ Using a uuid is recommended, but it is also fine to use any other random string.
 your application's name in the `id` can help to prevent overlap (e.g. your-app-012345abcdef). 
 
 - `id`: Peer's unique identifier
+- `isHost`: If this peer is currently hosting or not
 - `connectionCount`: Number of active peer connections (without you)
 - `getStorage`: Retrieve storage object
 

@@ -583,6 +583,13 @@ export default class PlayPeer {
      *  @returns {object} Get storage object
      */
     get getStorage() {
-        return this.#storage || {};
+        return { ...this.#storage } || {};
+    }
+
+    /**
+    *  @returns {boolean} Check if this peer is hosting
+    */
+    get isHost() {
+        return this.#isHost;
     }
 }
