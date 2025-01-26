@@ -12,6 +12,7 @@ export default class PlayPeer {
     id;
     #peer;
     #options;
+    #initialized = false;
 
     // Event callbacks stored in a map
     #callbacks = new Map();
@@ -119,6 +120,7 @@ export default class PlayPeer {
             this.#peer.on('open', () => {
                 this.#triggerEvent("status", "Connected to signalling server!");
                 clearTimeout(connectionOpenTimeout);
+                this.#initialized = true;
                 resolve();
             });
         });
@@ -256,12 +258,13 @@ export default class PlayPeer {
      * @returns {Promise} Promise resolves with peer id
      */
     createRoom(initialStorage = {}) {
-        if (!this.#peer || this.#peer.destroyed) {
-            this.#triggerEvent("error", "Cannot create room if peer is not initialized.");
-            console.error(ERROR_PREFIX + "Cannot create room if peer is not initialized.");
-            reject(new Error("Peer not initialized."));
-        }
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
+            if (!this.#peer || this.#peer.destroyed || !this.#initialized) {
+                this.#triggerEvent("error", "Cannot create room if peer is not initialized. Note that .init() is async.");
+                console.error(ERROR_PREFIX + "Cannot create room if peer is not initialized. Note that .init() is async.");
+                reject(new Error("Peer not initialized."));
+            }
+
             this.#isHost = true;
             this.#storage = initialStorage;
             this.#triggerEvent("storageUpdate", { ...this.#storage });
@@ -276,9 +279,9 @@ export default class PlayPeer {
      */
     async joinRoom(hostId) {
         return new Promise((resolve, reject) => {
-            if (!this.#peer || this.#peer.destroyed) {
-                this.#triggerEvent("error", "Cannot join room if peer is not initialized.");
-                console.error(ERROR_PREFIX + "Cannot join room if peer is not initialized.");
+            if (!this.#peer || this.#peer.destroyed || !this.#initialized) {
+                this.#triggerEvent("error", "Cannot join room if peer is not initialized. Note that .init() is async.");
+                console.error(ERROR_PREFIX + "Cannot join room if peer is not initialized. Note that .init() is async.");
                 reject(new Error("Peer not initialized."));
             }
             try {
@@ -562,6 +565,7 @@ export default class PlayPeer {
             this.#isHost = false;
             this.#hostConnections.clear();
             this.#hostConnectionsIdArray = [];
+            this.#initialized = false;
 
             // Clear intervals
             clearInterval(this.#heartbeatSendInterval);
