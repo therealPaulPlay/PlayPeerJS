@@ -209,9 +209,8 @@ export default class PlayPeer {
                 switch (data.type) {
                     case 'storage_update':
                         // Storage updates, sent out by clients
-                        if (this.#isHost) {
-                            this.#setStorageLocally(data.key, data.value);
-                            this.#broadcastMessage("storage_sync", { storage: this.#storage });
+                        if (this.#isHost && data.value && data.key) {
+                            this.updateStorage(data.key, data.value);
                         }
                         break;
                     case 'heartbeat_request': {
@@ -346,8 +345,11 @@ export default class PlayPeer {
                     if (!data || !data?.type) return;
                     switch (data.type) {
                         case 'storage_sync':
-                            this.#storage = data.storage;
-                            this.#triggerEvent("storageUpdate", { ...this.#storage });
+                            // Update storage with host sync only if local save isn't identical
+                            if (JSON.stringify(this.#storage) !== JSON.stringify(data.storage)) {
+                                this.#storage = data.storage;
+                                this.#triggerEvent("storageUpdate", { ...this.#storage });
+                            }
                             break;
                         case 'peer_list':
                             this.#hostConnectionsIdArray = data.peers;
@@ -386,6 +388,7 @@ export default class PlayPeer {
      * @param {*} value - New value
      */
     updateStorage(key, value) {
+        if (JSON.stringify(this.#storage[key]) === JSON.stringify(value)) return; // If the key already has this value, exit
         if (this.#isHost) {
             this.#setStorageLocally(key, value);
             this.#broadcastMessage("storage_sync", { storage: this.#storage });
