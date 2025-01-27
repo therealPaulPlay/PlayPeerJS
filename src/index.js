@@ -488,7 +488,7 @@ export default class PlayPeer {
                     value,
                     updateValue
                 });
-                this.#handleArrayUpdate(key, operation, value, updateValue); // Optimistc update
+                this.#handleArrayUpdate(key, operation, value, updateValue); // Optimistic update
             } catch (error) {
                 console.error(ERROR_PREFIX + `Failed to send array update to host:`, error);
                 this.#triggerEvent("error", `Failed to send array update to host: ${error}`);
