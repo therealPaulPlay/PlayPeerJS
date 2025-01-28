@@ -115,7 +115,7 @@ export default class PlayPeer {
                 this.#triggerEvent("error", "Connection attempt to singalling server timed out.");
                 this.destroy();
                 reject(new Error("Connection attempt to signalling server timed out."));
-            }, 1000);
+            }, 2000);
 
             this.#peer.on('open', () => {
                 this.#triggerEvent("status", "Connected to signalling server!");
@@ -304,7 +304,7 @@ export default class PlayPeer {
                     console.error(ERROR_PREFIX + "Connection attempt for joining room timed out.");
                     this.#triggerEvent("status", "Connection attempt for joining room timed out.");
                     reject(new Error("Connection attempt for joining room timed out."));
-                }, 3 * 1000);
+                }, 5 * 1000);
 
                 this.#outgoingConnection.on("open", () => {
                     clearTimeout(timeout);
