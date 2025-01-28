@@ -394,11 +394,13 @@ export default class PlayPeer {
             this.#broadcastMessage("storage_sync", { storage: this.#storage });
         } else {
             try {
-                this.#outgoingConnection?.send({
-                    type: 'storage_update',
-                    key,
-                    value
-                });
+                if (this.#outgoingConnection?.open) {
+                    this.#outgoingConnection?.send({
+                        type: 'storage_update',
+                        key,
+                        value
+                    });
+                }
             } catch (error) {
                 console.error(ERROR_PREFIX + "Error sending storage update to host:", error);
                 this.#triggerEvent("error", "Error sending storage update to host: " + error);
@@ -481,13 +483,15 @@ export default class PlayPeer {
         } else {
             try {
                 // Request the host to perform the operation
-                this.#outgoingConnection?.send({
-                    type: 'array_update',
-                    key,
-                    operation,
-                    value,
-                    updateValue
-                });
+                if (this.#outgoingConnection?.open) {
+                    this.#outgoingConnection?.send({
+                        type: 'array_update',
+                        key,
+                        operation,
+                        value,
+                        updateValue
+                    });
+                }
                 this.#handleArrayUpdate(key, operation, value, updateValue); // Optimistic update
             } catch (error) {
                 console.error(ERROR_PREFIX + `Failed to send array update to host:`, error);
