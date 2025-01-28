@@ -437,6 +437,20 @@ export default class PlayPeer {
                 this.#storage[key].push(value);
                 break;
 
+            case 'add-unique':
+                // Check if the value already exists (deep comparison for objects)
+                const uniqueIndex = updatedArray.findIndex(item => {
+                    if (typeof value === 'object' && value !== null) {
+                        return JSON.stringify(item) === JSON.stringify(value);
+                    }
+                    return item === value; // Strict equality for primitives
+                });
+
+                if (uniqueIndex == -1) {
+                    this.#storage[key].push(value); // Add the unique value
+                }
+                break;
+
             case 'remove-matching':
                 // Remove matching value (deep comparison for objects)
                 this.#storage[key] = updatedArray.filter(item => {

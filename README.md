@@ -54,7 +54,7 @@ await peer.joinRoom('host-peer-id'); // Rejects if connection fails or times out
 
 // Interact with the synced storage
 const currentState = peer.getStorage;
-peer.updateStorageArray('players', 'add', { username: 'PeerEnjoyer4', level: 2 }); // Special method to enable simultaneous storage updates for arrays
+peer.updateStorageArray('players', 'add-unique', { username: 'PeerEnjoyer4', level: 2 }); // Special method to enable simultaneous storage updates for arrays
 peer.updateStorage('latestPlayer', 'PeerEnjoyer4'); // Regular synced storage update
 
 // To leave the room, destroy the instance
@@ -83,7 +83,7 @@ Creates a new PlayPeer instance with a specified peer ID and [PeerJS options](ht
 #### State Management
 
 - `updateStorage(key: string, value: any)`: Update a value in the synchronized storage
-- `updateStorageArray(key: string, operation: 'add' | 'remove-matching' | 'update-matching', value: any, updateValue?: any)`: Safely update arrays in storage by adding, removing, or updating items. This is necessary for when array updates might be happening simultanously to ensure changes are being applied and not overwritten.
+- `updateStorageArray(key: string, operation: 'add' | 'add-unique' | 'remove-matching' | 'update-matching', value: any, updateValue?: any)`: Safely update arrays in storage by adding, removing, or updating items. This is necessary for when array updates might be happening simultanously to ensure changes are being applied and not overwritten. Using add-unique instead of add ensures that this value can only be in the array once.
 - `onEvent(event: string, callback: Function)`: Register an event callback
 
 ##### Event types
