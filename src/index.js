@@ -209,7 +209,7 @@ export default class PlayPeer {
                 switch (data.type) {
                     case 'storage_update':
                         // Storage updates, sent out by clients
-                        if (this.#isHost && data.value && data.key) {
+                        if (this.#isHost && data.key) {
                             this.updateStorage(data.key, data.value);
                         }
                         break;
