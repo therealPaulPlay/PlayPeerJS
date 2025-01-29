@@ -157,7 +157,7 @@ export default class PlayPeer {
 
         this.#peer.on('close', () => {
             this.#triggerEvent("status", "Peer permanently closed.");
-            console.error(ERROR_PREFIX + "Connection permanently closed.");
+            console.warn(WARNING_PREFIX + "Connection permanently closed.");
             this.destroy();
         });
     }
