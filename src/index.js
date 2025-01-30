@@ -13,6 +13,7 @@ export default class PlayPeer {
     #peer;
     #options;
     #initialized = false;
+    #maxSize;
 
     // Event callbacks stored in a map
     #callbacks = new Map();
@@ -115,7 +116,7 @@ export default class PlayPeer {
                 this.#triggerEvent("error", "Connection attempt to singalling server timed out.");
                 this.destroy();
                 reject(new Error("Connection attempt to signalling server timed out."));
-            }, 2000);
+            }, 2 * 1000);
 
             this.#peer.on('open', () => {
                 this.#triggerEvent("status", "Connected to signalling server!");
@@ -167,7 +168,15 @@ export default class PlayPeer {
      * @private
      */
     #handleIncomingConnections(incomingConnection) {
-        // Close broken connections that don't open or address the wrong host (delay ensures the close event triggers on peers)
+        // Check if room is full
+        if (this.#isHost && this.#maxSize && (this.#hostConnections?.size + 1) >= this.#maxSize) {
+            console.warn(WARNING_PREFIX + `Connection ${incomingConnection.peer} rejected - room is full.`);
+            this.#triggerEvent("status", "Rejected connection - room is full.");
+            incomingConnection.close();
+            return; // Don't continue with the rest of events
+        }
+
+        // Close broken connections that don't open in time or address the wrong host
         setTimeout(() => {
             if (!incomingConnection.open || !this.#isHost) {
                 try {
@@ -254,9 +263,10 @@ export default class PlayPeer {
     /**
      * Create room and become host
      * @param {object} initialStorage - Initial storage object
+     * @param {number} [maxSize] - Optional maximum number of peers allowed in the room
      * @returns {Promise} Promise resolves with peer id
      */
-    createRoom(initialStorage = {}) {
+    createRoom(initialStorage = {}, maxSize) {
         return new Promise((resolve, reject) => {
             if (!this.#peer || this.#peer.destroyed || !this.#initialized) {
                 this.#triggerEvent("error", "Cannot create room if peer is not initialized. Note that .init() is async.");
@@ -266,8 +276,9 @@ export default class PlayPeer {
 
             this.#isHost = true;
             this.#storage = initialStorage;
+            this.#maxSize = maxSize; // Store the maxSize value
             this.#triggerEvent("storageUpdate", { ...this.#storage });
-            this.#triggerEvent("status", "Room created.");
+            this.#triggerEvent("status", `Room created${maxSize ? ` with size ${maxSize}` : ''}.`);
             resolve(this.id);
         });
     }
@@ -304,7 +315,7 @@ export default class PlayPeer {
                     console.error(ERROR_PREFIX + "Connection attempt for joining room timed out.");
                     this.#triggerEvent("status", "Connection attempt for joining room timed out.");
                     reject(new Error("Connection attempt for joining room timed out."));
-                }, 5 * 1000);
+                }, 3 * 1000);
 
                 this.#outgoingConnection.on("open", () => {
                     clearTimeout(timeout);
@@ -587,6 +598,7 @@ export default class PlayPeer {
             this.#hostConnections.clear();
             this.#hostConnectionsIdArray = [];
             this.#initialized = false;
+            this.#maxSize = undefined;
 
             // Clear intervals
             clearInterval(this.#heartbeatSendInterval);
