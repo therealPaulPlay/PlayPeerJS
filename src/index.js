@@ -438,14 +438,12 @@ export default class PlayPeer {
      * @param {*} updateValue
      */
     #handleArrayUpdate(key, operation, value, updateValue) {
-        const updatedArray = this.#storage?.[key] || [];
-        if (!Array.isArray(this.#storage?.[key])) {
-            this.#storage[key] = []; // Ensure it's an array if it wasn't already
-        }
+        let updatedArray = this.#storage?.[key] || [];
+        if (!Array.isArray(this.#storage?.[key])) this.#storage[key] = []; // Ensure it's an array if it wasn't already
 
         switch (operation) {
             case 'add':
-                this.#storage[key].push(value);
+                updatedArray.push(value);
                 break;
 
             case 'add-unique':
@@ -458,13 +456,13 @@ export default class PlayPeer {
                 });
 
                 if (uniqueIndex == -1) {
-                    this.#storage[key].push(value); // Add the unique value
+                    updatedArray.push(value); // Add the unique value
                 }
                 break;
 
             case 'remove-matching':
                 // Remove matching value (deep comparison for objects)
-                this.#storage[key] = updatedArray.filter(item => {
+                updatedArray = updatedArray.filter(item => {
                     if (typeof value === 'object' && value !== null) {
                         return JSON.stringify(item) !== JSON.stringify(value);
                     }
@@ -482,7 +480,7 @@ export default class PlayPeer {
                 });
 
                 if (updateIndex > -1) {
-                    this.#storage[key][updateIndex] = updateValue; // Perform the update
+                    updatedArray[updateIndex] = updateValue; // Perform the update
                 }
                 break;
 
@@ -491,7 +489,7 @@ export default class PlayPeer {
                 this.#triggerEvent("error", `Unknown array operation: ${operation}`);
         }
 
-        this.#setStorageLocally(key, this.#storage[key]); // Update storage locally
+        this.#setStorageLocally(key, updatedArray); // Update storage locally
     }
 
     /**
