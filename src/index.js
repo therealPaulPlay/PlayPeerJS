@@ -589,6 +589,9 @@ export default class PlayPeer {
                 this.#triggerEvent("destroy");
             }
 
+            // Clear intervals
+            clearInterval(this.#heartbeatSendInterval);
+
             // Resets
             this.#peer = undefined;
             this.#storage = {};
@@ -597,10 +600,7 @@ export default class PlayPeer {
             this.#hostConnectionsIdArray = [];
             this.#initialized = false;
             this.#maxSize = undefined;
-
-            // Clear intervals
-            clearInterval(this.#heartbeatSendInterval);
-            this.#triggerEvent("status", "Resetted internal data.");
+            this.#callbacks.clear();
         } catch (error) {
             console.error(ERROR_PREFIX + "Error during cleanup:", error);
             this.#triggerEvent("error", "Error during cleanup: " + error);
