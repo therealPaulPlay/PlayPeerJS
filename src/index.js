@@ -9,7 +9,7 @@ const WARNING_PREFIX = "PlayPeer warning: ";
  */
 export default class PlayPeer {
     // Config properties
-    id;
+    #id;
     #peer;
     #options;
     #initialized = false;
@@ -36,7 +36,7 @@ export default class PlayPeer {
      * @param {object} [options] - Peer options (ice config, host, port etc.)
      */
     constructor(id, options) {
-        this.id = id;
+        this.#id = id;
         if (options) this.#options = options;
     }
 
@@ -49,8 +49,9 @@ export default class PlayPeer {
         const validEvents = [
             "status",
             "error",
-            "destroy",
+            "instanceDestroyed",
             "storageUpdate",
+            "hostMigration",
             "incomingPeerConnected",
             "incomingPeerDisconnected",
             "incomingPeerError",
@@ -92,12 +93,12 @@ export default class PlayPeer {
     async init() {
         return new Promise((resolve, reject) => {
             this.destroy(); // If peer already exists, destroy
-            if (!this.id) console.warn(ERROR_PREFIX + "No id provided!");
+            if (!this.#id) console.warn(ERROR_PREFIX + "No id provided!");
             if (!this.#options) console.warn(ERROR_PREFIX + "No config provided! Necessary stun and turn servers missing.");
             this.#triggerEvent("status", "Initializing instance...");
 
             try {
-                this.#peer = new Peer(this.id, this.#options);
+                this.#peer = new Peer(this.#id, this.#options);
             } catch (error) {
                 console.error(ERROR_PREFIX + "Failed to initialize peer:", error);
                 this.#triggerEvent("error", "Failed to initialize peer: " + error);
@@ -279,7 +280,7 @@ export default class PlayPeer {
             this.#maxSize = maxSize; // Store the maxSize value
             this.#triggerEvent("storageUpdate", { ...this.#storage });
             this.#triggerEvent("status", `Room created${maxSize ? ` with size ${maxSize}` : ''}.`);
-            resolve(this.id);
+            resolve(this.#id);
         });
     }
 
@@ -556,15 +557,17 @@ export default class PlayPeer {
         const migrateToHostIndex = async (index) => {
             if (index >= connectedPeerIds.length) return;
 
-            if (connectedPeerIds[index] === this.id) {
+            if (connectedPeerIds[index] === this.#id) {
                 this.#isHost = true;
-                this.#triggerEvent("status", `This peer (index ${index}) is now the host.`);
                 this.#outgoingConnection = null;
+                this.#triggerEvent("status", `This peer (index ${index}) is now the host.`);
+                this.#triggerEvent("hostMigration", this.#id);
             } else {
                 this.#triggerEvent("status", `Attempting to connect to new host (index ${index}) in 1s...`);
                 try {
-                    await new Promise(resolve => setTimeout(resolve, 1250));
+                    await new Promise(resolve => setTimeout(resolve, 1250)); // Wait to give new host time to detect disconnection & open room
                     await this.joinRoom(connectedPeerIds[index]);
+                    this.#triggerEvent("hostMigration", connectedPeerIds[index]);
                 } catch (error) {
                     this.#triggerEvent("error", "Error migrating host while connecting to new room: " + error);
                     console.warn(WARNING_PREFIX + `Error migrating host (index ${index}) while connecting to new room:`, error);
@@ -586,7 +589,7 @@ export default class PlayPeer {
 
                 // Trigger events
                 this.#triggerEvent("status", "Destroyed.");
-                this.#triggerEvent("destroy");
+                this.#triggerEvent("instanceDestroyed");
             }
 
             // Clear intervals
@@ -627,5 +630,9 @@ export default class PlayPeer {
     */
     get isHost() {
         return this.#isHost;
+    }
+
+    get id() {
+        return this.#id;
     }
 }

@@ -48,13 +48,9 @@
 
         let peer;
 
-        // Function to generate a random 10-character ID
-        function generateId() {
-            return Math.random().toString(36).substring(2, 12);
-        }
-
         // Automatically generate and display the ID
-        const peerId = generateId();
+        const peerId = Math.random().toString(36).substring(2, 12);
+
         document.getElementById('peerIdDisplay').textContent = `Your peer ID: ${peerId}`;
 
         async function initPeer(id) {
@@ -76,7 +72,6 @@
             });
 
             peer.onEvent('status', status => console.log('Status:', status));
-
             await peer.init();
         }
 
