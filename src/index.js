@@ -50,8 +50,8 @@ export default class PlayPeer {
             "status",
             "error",
             "instanceDestroyed",
-            "storageUpdate",
-            "hostMigration",
+            "storageUpdated",
+            "hostMigrated",
             "incomingPeerConnected",
             "incomingPeerDisconnected",
             "incomingPeerError",
@@ -278,7 +278,7 @@ export default class PlayPeer {
             this.#isHost = true;
             this.#storage = initialStorage;
             this.#maxSize = maxSize; // Store the maxSize value
-            this.#triggerEvent("storageUpdate", { ...this.#storage });
+            this.#triggerEvent("storageUpdated", { ...this.#storage });
             this.#triggerEvent("status", `Room created${maxSize ? ` with size ${maxSize}` : ''}.`);
             resolve(this.#id);
         });
@@ -360,7 +360,7 @@ export default class PlayPeer {
                             // Update storage with host sync only if local save isn't identical
                             if (JSON.stringify(this.#storage) !== JSON.stringify(data.storage)) {
                                 this.#storage = data.storage;
-                                this.#triggerEvent("storageUpdate", { ...this.#storage });
+                                this.#triggerEvent("storageUpdated", { ...this.#storage });
                             }
                             break;
                         case 'peer_list':
@@ -427,7 +427,7 @@ export default class PlayPeer {
      */
     #setStorageLocally(key, value) {
         this.#storage[key] = value;
-        this.#triggerEvent("storageUpdate", { ...this.#storage });
+        this.#triggerEvent("storageUpdated", { ...this.#storage });
     }
 
     /**
@@ -561,13 +561,13 @@ export default class PlayPeer {
                 this.#isHost = true;
                 this.#outgoingConnection = null;
                 this.#triggerEvent("status", `This peer (index ${index}) is now the host.`);
-                this.#triggerEvent("hostMigration", this.#id);
+                this.#triggerEvent("hostMigrated", this.#id);
             } else {
                 this.#triggerEvent("status", `Attempting to connect to new host (index ${index}) in 1s...`);
                 try {
                     await new Promise(resolve => setTimeout(resolve, 1250)); // Wait to give new host time to detect disconnection & open room
                     await this.joinRoom(connectedPeerIds[index]);
-                    this.#triggerEvent("hostMigration", connectedPeerIds[index]);
+                    this.#triggerEvent("hostMigrated", connectedPeerIds[index]);
                 } catch (error) {
                     this.#triggerEvent("error", "Error migrating host while connecting to new room: " + error);
                     console.warn(WARNING_PREFIX + `Error migrating host (index ${index}) while connecting to new room:`, error);

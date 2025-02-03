@@ -91,8 +91,8 @@ Creates a new PlayPeer instance with a specified peer ID and [PeerJS options](ht
 - `status`: Connection status updates (returns status `string`)
 - `error`: Error events (returns error `string`)
 - `instanceDestroyed`: Peer destruction event
-- `storageUpdate`: Storage state changes (returns storage `object`)
-- `hostMigration`: Host changes (returns host id / room code `string`)
+- `storageUpdated`: Storage state changes (returns storage `object`)
+- `hostMigrated`: Host changes (returns host id / room code `string`)
 - `incomingPeerConnected`: New peer connected (returns peer-id `string`)
 - `incomingPeerDisconnected`: Peer disconnected (returns peer-id `string`)
 - `incomingPeerError`: Peer connection error (returns peer-id `string`)
