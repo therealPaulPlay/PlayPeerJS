@@ -62,8 +62,8 @@
                     ]
                 }
             });
-
-            peer.onEvent('storageUpdate', (storage) => {
+            peer.onEvent('status', status => console.log('Status:', status));
+            peer.onEvent('storageUpdated', (storage) => {
                 const messages = document.getElementById('messages');
                 messages.innerHTML = storage.messages?.map(msg =>
                     `<div><strong>${msg.sender}:</strong> ${msg.text}</div>`
@@ -71,7 +71,6 @@
                 messages.scrollTop = messages.scrollHeight;
             });
 
-            peer.onEvent('status', status => console.log('Status:', status));
             await peer.init();
         }
 
@@ -81,7 +80,7 @@
             document.getElementById("host-container").style.opacity = "0.5";
 
             if (!peer) await initPeer(peerId);
-            peer.createRoom({ messages: [] });
+            await peer.createRoom({ messages: [] });
         }
 
         async function join() {
@@ -102,16 +101,15 @@
         function sendMessage() {
             const input = document.getElementById('chatInput');
             const text = input.value.trim();
+            input.value = '';
             if (!text) return;
 
-            const currentStorage = peer.getStorage;
             const newMessage = {
                 sender: peer.id,
                 text: text
             };
 
             peer.updateStorageArray('messages', 'add', newMessage);
-            input.value = '';
         }
 
         // Make functions globally available

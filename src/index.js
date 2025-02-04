@@ -92,7 +92,7 @@ export default class PlayPeer {
     */
     async init() {
         return new Promise((resolve, reject) => {
-            this.destroy(); // If peer already exists, destroy
+            if (this.#peer) return console.error(ERROR_PREFIX + "Instance already initialized!");
             if (!this.#id) console.warn(ERROR_PREFIX + "No id provided!");
             if (!this.#options) console.warn(ERROR_PREFIX + "No config provided! Necessary stun and turn servers missing.");
             this.#triggerEvent("status", "Initializing instance...");
@@ -147,19 +147,14 @@ export default class PlayPeer {
         });
 
         this.#peer.on('error', (error) => {
-            if (error.type === "network") {
-                console.error(ERROR_PREFIX + "Fatal network error:", error);
-                this.#triggerEvent("error", "Fatal network error: " + error);
-                this.destroy();
-            } else {
-                console.error(ERROR_PREFIX + "Peer error:", error);
-                this.#triggerEvent("error", "Peer error: " + error);
-            }
+            console.error(ERROR_PREFIX + `Error of type '${error?.type}':`, error);
+            this.#triggerEvent("error", `Error of type '${error?.type}': ` + error);
         });
 
         this.#peer.on('close', () => {
             this.#triggerEvent("status", "Peer permanently closed.");
-            console.warn(WARNING_PREFIX + "Connection permanently closed.");
+            this.#triggerEvent("error", "Peer permanently closed. Please ensure your client is WebRTC-compatible.");
+            console.warn(WARNING_PREFIX + "Peer permanently closed.");
             this.destroy();
         });
     }
