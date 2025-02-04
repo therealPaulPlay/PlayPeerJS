@@ -151,11 +151,12 @@ export default class PlayPeer {
             this.#triggerEvent("error", `Error of type '${error?.type}': ` + error); // Don't destroy here - it's either done automatically (including on browser reload) or unnecessary
         });
 
+        // 'close' is triggered when the peer was destroyed either by peer.destroy() or by fatal error
         this.#peer.on('close', () => {
             this.#triggerEvent("status", "Peer permanently closed.");
             this.#triggerEvent("error", "Peer permanently closed. Please ensure your client is WebRTC-compatible.");
             console.warn(WARNING_PREFIX + "Peer permanently closed.");
-            this.destroy();
+            this.destroy(); // Clean up and trigger PlayPeer destroy event (if not already destroyed)
         });
     }
 
