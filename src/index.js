@@ -148,7 +148,7 @@ export default class PlayPeer {
 
         this.#peer.on('error', (error) => {
             console.error(ERROR_PREFIX + `Error of type '${error?.type}':`, error);
-            this.#triggerEvent("error", `Error of type '${error?.type}': ` + error);
+            this.#triggerEvent("error", `Error of type '${error?.type}': ` + error); // Don't destroy here - it's either done automatically (including on browser reload) or unnecessary
         });
 
         this.#peer.on('close', () => {
