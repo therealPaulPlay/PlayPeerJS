@@ -202,9 +202,9 @@ export default class PlayPeer {
                         return;
                     }
                     this.#hostConnections?.forEach((e) => {
-                        if (e[1] < Date.now() - 2000) {
-                            console.warn(WARNING_PREFIX + "Peer did not respond to heartbeat - closing connection.");
-                            this.#triggerEvent("status", "Peer did not respond to heartbeat - closting connection.");
+                        if (e[1] < Date.now() - 2250) {
+                            console.warn(WARNING_PREFIX + "Peer did not send heartbeats - closing connection.");
+                            this.#triggerEvent("status", "Peer did not send heartbeats - closting connection.");
                             try { e[0]?.close(); } catch (error) {
                                 console.error(ERROR_PREFIX + "Failed to close incoming connection (no heartbeat):", error);
                                 this.#triggerEvent("error", "Failed to close incoming connection (no heartbeat): " + error);
@@ -338,6 +338,8 @@ export default class PlayPeer {
                     reject(new Error("Connection attempt for joining room timed out."));
                 }, 3 * 1000);
 
+                let failedHeartbeatAttempts = 0;
+
                 this.#outgoingConnection.on("open", () => {
                     clearTimeout(timeout);
                     this.#triggerEvent("outgoingPeerConnected", hostId);
@@ -348,10 +350,13 @@ export default class PlayPeer {
                     clearInterval(this.#heartbeatSendInterval); // Prevent multiple ones stacking up in case function fires twice or more
                     this.#heartbeatSendInterval = setInterval(() => {
                         if (!this.#heartbeatReceived) {
-                            console.warn(WARNING_PREFIX + "Host did not respond to heartbeat - disconnecting from host.");
-                            this.#triggerEvent("status", "Host did not respond to heartbeat - disconnecting from host.");
-                            this.#outgoingConnection?.close();
-                            return;
+                            failedHeartbeatAttempts++;
+                            if (failedHeartbeatAttempts >= 2) {
+                                console.warn(WARNING_PREFIX + "Host did not respond to heartbeat twice - disconnecting from host.");
+                                this.#triggerEvent("status", "Host did not respond to heartbeat twice - disconnecting from host.");
+                                this.#outgoingConnection?.close();
+                                return;
+                            }
                         }
 
                         // Ping host
@@ -387,6 +392,7 @@ export default class PlayPeer {
                             break;
                         case 'heartbeat_response':
                             this.#heartbeatReceived = true;
+                            failedHeartbeatAttempts = 0;
                             break;
                     }
                 });
