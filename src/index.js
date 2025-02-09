@@ -345,6 +345,7 @@ export default class PlayPeer {
 
                     // Regularly check if host responds to heartbeat
                     this.#heartbeatReceived = true;
+                    clearInterval(this.#heartbeatSendInterval); // Prevent multiple ones stacking up in case function fires twice or more
                     this.#heartbeatSendInterval = setInterval(() => {
                         if (!this.#heartbeatReceived) {
                             console.warn(WARNING_PREFIX + "Host did not respond to heartbeat - disconnecting from host.");
