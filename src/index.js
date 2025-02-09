@@ -215,13 +215,13 @@ export default class PlayPeer {
             }
 
             incomingConnection.on('open', () => {
-                if (this.#hostConnections.findIndex(c => c[0] === incomingConnection) == -1) this.#hostConnections.push([incomingConnection, Date.now()]); // Add new peer
-                this.#triggerEvent("status", "Incoming connection opened.");
-                this.#triggerEvent("incomingPeerConnected", incomingConnection.peer);
-
                 // Sync host's connections with all peers
+                if (this.#hostConnections.findIndex(c => c[0] === incomingConnection) == -1) this.#hostConnections.push([incomingConnection, Date.now()]); // Add new peer
                 const peerList = Array.from(this.#hostConnections).map(c => c[0]?.peer);
                 this.#broadcastMessage("peer_list", { peers: peerList });
+
+                this.#triggerEvent("status", "Incoming connection opened.");
+                this.#triggerEvent("incomingPeerConnected", incomingConnection.peer);
 
                 // Send current storage state to new peer
                 try {
