@@ -316,7 +316,6 @@ export default class PlayPeer {
                 reject(new Error("Peer not initialized."));
             }
             try {
-                if (this.#outgoingConnection) this.#outgoingConnection.close(); // Close previous connection (if exists)
                 this.#outgoingConnection = this.#peer.connect(hostId, { reliable: true }); // Connect to host
                 this.#triggerEvent("status", "Connecting to host...");
 
@@ -347,8 +346,9 @@ export default class PlayPeer {
 
                     // Regularly check if host responds to heartbeat
                     this.#heartbeatReceived = true;
-                    clearInterval(this.#heartbeatSendInterval); // Prevent multiple ones stacking up in case function fires twice or more
+                    clearInterval(this.#heartbeatSendInterval); // Prevent multiple ones stacking up
                     this.#heartbeatSendInterval = setInterval(() => {
+                        if (this.#isHost) return clearInterval(this.#heartbeatSendInterval);
                         if (!this.#heartbeatReceived) {
                             failedHeartbeatAttempts++;
                             if (failedHeartbeatAttempts >= 2) {
