@@ -162,6 +162,19 @@ export default class PlayPeer {
     }
 
     /**
+     * Remove incoming connection from the host connections array
+     * @param {object} incomingConnection 
+     */
+    #removeIncomingConnectionFromArray(incomingConnection) {
+        const removeIndex = this.#hostConnections.findIndex(c => c[0] === incomingConnection);
+        if (removeIndex !== -1) this.#hostConnections.splice(removeIndex, 1);
+
+        // Sync host connections with peers
+        const peerList = Array.from(this.#hostConnections).map(c => c[0]?.peer);
+        this.#broadcastMessage("peer_list", { peers: peerList });
+    }
+
+    /**
      * Handle incoming peer connections (Host function)
      * @private
      */
@@ -180,18 +193,19 @@ export default class PlayPeer {
         // Close broken connections that don't open in time or address the wrong host
         setTimeout(() => {
             if (!incomingConnection.open || !this.#isHost) {
-                console.warn(WARNING_PREFIX + `Connection ${incomingConnection.peer} closed - ${this.#isHost ? "no response" : "not hosting"}.`);
+                console.warn(WARNING_PREFIX + `Connection ${incomingConnection?.peer} closed - ${this.#isHost ? "did not open" : "not hosting"}.`);
                 try { incomingConnection.close(); } catch (error) {
                     console.error(ERROR_PREFIX + "Failed to close incoming connection (invalid):", error);
                     this.#triggerEvent("error", "Failed to close incoming connection (invalid): " + error);
                 }
-                return;
             }
-        }, 3 * 1000);
+        }, 2 * 1000);
 
         // Only process incoming connections if hosting
         if (this.#isHost) {
+            // Add new peer immediately (not after 'open') to ensure room size limits work properly
             this.#triggerEvent("status", "New peer connecting...");
+            if (this.#hostConnections.findIndex(c => c[0] === incomingConnection) == -1) this.#hostConnections.push([incomingConnection, Date.now()]);
 
             // Set up host heartbeat check if not already
             if (!this.#heartbeatHostCheckInterval) {
@@ -202,13 +216,14 @@ export default class PlayPeer {
                         return;
                     }
                     this.#hostConnections?.forEach((e) => {
-                        if (e[1] < Date.now() - 2250) {
+                        if (e[1] < Date.now() - 2500) {
                             console.warn(WARNING_PREFIX + "Peer did not send heartbeats - closing connection.");
-                            this.#triggerEvent("status", "Peer did not send heartbeats - closting connection.");
+                            this.#triggerEvent("status", "Peer did not send heartbeats - closing connection.");
                             try { e[0]?.close(); } catch (error) {
                                 console.error(ERROR_PREFIX + "Failed to close incoming connection (no heartbeat):", error);
                                 this.#triggerEvent("error", "Failed to close incoming connection (no heartbeat): " + error);
                             }
+                            this.#removeIncomingConnectionFromArray(e[0]); // Remove the entry now, regardless if the close worked
                         }
                     });
                 }, 1000);
@@ -216,7 +231,6 @@ export default class PlayPeer {
 
             incomingConnection.on('open', () => {
                 // Sync host's connections with all peers
-                if (this.#hostConnections.findIndex(c => c[0] === incomingConnection) == -1) this.#hostConnections.push([incomingConnection, Date.now()]); // Add new peer
                 const peerList = Array.from(this.#hostConnections).map(c => c[0]?.peer);
                 this.#broadcastMessage("peer_list", { peers: peerList });
 
@@ -264,13 +278,9 @@ export default class PlayPeer {
             });
 
             incomingConnection.on('close', () => {
-                const removeIndex = this.#hostConnections.findIndex(c => c[0] === incomingConnection);
-                if (removeIndex !== -1) this.#hostConnections.splice(removeIndex, 1);
-                this.#triggerEvent("incomingPeerDisconnected", incomingConnection.peer);
+                this.#removeIncomingConnectionFromArray(incomingConnection);
+                this.#triggerEvent("incomingPeerDisconnected", incomingConnection?.peer);
                 this.#triggerEvent("status", "Incoming connection closed.");
-
-                const peerList = Array.from(this.#hostConnections).map(c => c[0]?.peer);
-                this.#broadcastMessage("peer_list", { peers: peerList });
             });
 
             incomingConnection.on('error', (error) => {
