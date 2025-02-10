@@ -199,7 +199,7 @@ export default class PlayPeer {
                     this.#triggerEvent("error", "Failed to close incoming connection (invalid): " + error);
                 }
             }
-        }, 2 * 1000);
+        }, 3 * 1000);
 
         // Only process incoming connections if hosting
         if (this.#isHost) {
@@ -216,7 +216,7 @@ export default class PlayPeer {
                         return;
                     }
                     this.#hostConnections?.forEach((e) => {
-                        if (e[1] < Date.now() - 2500) {
+                        if (e[1] < Date.now() - 3000) {
                             console.warn(WARNING_PREFIX + "Peer did not send heartbeats - closing connection.");
                             this.#triggerEvent("status", "Peer did not send heartbeats - closing connection.");
                             try { e[0]?.close(); } catch (error) {
