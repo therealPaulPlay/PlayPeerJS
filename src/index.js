@@ -320,7 +320,7 @@ export default class PlayPeer {
      */
     async joinRoom(hostId) {
         return new Promise((resolve, reject) => {
-            if (!this.#peer || this.#peer.destroyed || !this.#initialized) {
+            if (!this.#peer || this.#peer?.destroyed || !this.#initialized) {
                 this.#triggerEvent("error", "Cannot join room if peer is not initialized. Note that .init() is async.");
                 console.error(ERROR_PREFIX + "Cannot join room if peer is not initialized. Note that .init() is async.");
                 reject(new Error("Peer not initialized."));
