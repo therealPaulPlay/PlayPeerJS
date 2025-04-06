@@ -585,6 +585,11 @@ export default class PlayPeer {
      * @private
      */
     async #migrateHost() {
+        if (this.#peer.destroyed) {
+            console.warn(WARNING_PREFIX + "Can't migrate host since peer is destroyed.");
+            this.#triggerEvent("error", "Can't migrate host since peer is destroyed.");
+            return;
+        }
         this.#triggerEvent("status", "Starting host migration...");
         const connectedPeerIds = this.#hostConnectionsIdArray;
         connectedPeerIds.sort();
