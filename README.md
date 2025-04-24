@@ -86,7 +86,7 @@ Creates a new PlayPeer instance with a specified peer ID and [PeerJS options](ht
 - `joinRoom(hostId: string)`: Join an existing room. Returns promise, rejects after 2s timeout (async)
 - `destroy()`: Use this to leave a room. Destroys the peer instance
 
-#### State Management
+#### State management
 
 - `updateStorage(key: string, value: any)`: Update a value in the synchronized storage
 - `updateStorageArray(key: string, operation: 'add' | 'add-unique' | 'remove-matching' | 'update-matching', value: any, updateValue?: any)`: Safely update arrays in storage by adding, removing, or updating items. This is necessary for when array updates might be happening simultanously to ensure changes are being applied and not overwritten. Using add-unique instead of add ensures that this value can only be in the array once.
