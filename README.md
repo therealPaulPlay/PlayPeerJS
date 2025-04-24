@@ -13,6 +13,13 @@ PlayPeer eliminates the traditional complexity of WebRTC multiplayer implementat
 
 ![Diagram explaining the difference](/resources/explanation.png)
 
+## WebRTC vs. WebSockets shouldn't be a decision
+
+> :bulb
+> Check out [PlaySocketJS](https://github.com/therealPaulPlay/PlaySocketJS), the
+> Websocket counterpart to PlayPeerJS. It uses an almost identical API with the only differences
+> being the available event types as well as the constructor (which needs a ws:// address).
+
 ## Installation
 
 ```bash
