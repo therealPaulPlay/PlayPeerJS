@@ -302,7 +302,7 @@ export default class PlayPeer {
             }
 
             this.#isHost = true;
-            this.#storage = initialStorage;
+            this.#storage = { ...initialStorage };
             this.#maxSize = maxSize; // Store the maxSize value
             this.#triggerEvent("storageUpdated", { ...this.#storage });
             this.#triggerEvent("status", `Room created${maxSize ? ` with size ${maxSize}` : ''}.`);
