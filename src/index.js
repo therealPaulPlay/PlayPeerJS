@@ -75,9 +75,7 @@ export default class PlayPeer {
      */
     #triggerEvent(event, ...args) {
         const callbacks = this.#callbacks.get(event);
-        if (!callbacks || callbacks.length === 0) return;
-
-        callbacks.forEach((callback) => {
+        callbacks?.forEach((callback) => {
             try {
                 callback(...args);
             } catch (error) {
@@ -252,9 +250,7 @@ export default class PlayPeer {
                 switch (data.type) {
                     case 'storage_update':
                         // Storage updates, sent out by clients
-                        if (this.#isHost && data.key) {
-                            this.updateStorage(data.key, data.value);
-                        }
+                        if (this.#isHost && data.key) this.updateStorage(data.key, data.value);
                         break;
                     case 'heartbeat_request': {
                         // Respond to peers requesting heartbeat
@@ -345,7 +341,7 @@ export default class PlayPeer {
                     console.error(ERROR_PREFIX + "Connection attempt for joining room timed out.");
                     this.#triggerEvent("status", "Connection attempt for joining room timed out.");
                     reject(new Error("Connection attempt for joining room timed out."));
-                }, 3 * 1000);
+                }, 5 * 1000);
 
                 let failedHeartbeatAttempts = 0;
 
@@ -490,9 +486,7 @@ export default class PlayPeer {
                     return item === value; // Strict equality for primitives
                 });
 
-                if (uniqueIndex == -1) {
-                    updatedArray.push(value); // Add the unique value
-                }
+                if (uniqueIndex == -1) updatedArray.push(value); // Add the unique value
                 break;
 
             case 'remove-matching':
