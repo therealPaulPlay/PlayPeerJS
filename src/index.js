@@ -603,8 +603,7 @@ export default class PlayPeer {
                     await this.joinRoom(connectedPeerIds[index]);
                     this.#triggerEvent("hostMigrated", connectedPeerIds[index]);
                 } catch (error) {
-                    this.#triggerEvent("error", "Error migrating host while connecting to new room: " + error);
-                    console.warn(WARNING_PREFIX + `Error migrating host (index ${index}) while connecting to new room:`, error);
+                    console.warn(WARNING_PREFIX + `Error connecting to room (index ${index}) while migrating host:`, error);
                     await migrateToHostIndex(index + 1);
                 }
             }
