@@ -42,6 +42,7 @@
     <div id="messages"></div>
     <input type="text" id="chatInput" placeholder="Type message...">
     <button onclick="sendMessage()">Send</button>
+    <button onclick="clearChat()">Clear chat</button>
 
     <script type="module">
         import PlayPeer from '../dist/playpeer.js';
@@ -112,10 +113,15 @@
             peer.updateStorageArray('messages', 'add', newMessage);
         }
 
+        function clearChat() {
+            peer.updateStorage('messages', []);
+        }
+
         // Make functions globally available
         window.host = host;
         window.join = join;
         window.sendMessage = sendMessage;
+        window.clearChat = clearChat;
 
         // Enter key to send
         document.getElementById('chatInput').addEventListener('keypress', (e) => {

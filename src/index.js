@@ -237,7 +237,7 @@ export default class PlayPeer {
 
                 // Send current storage state to new peer
                 try {
-                    incomingConnection.send({ type: 'storage_sync', storage: this.#storage });
+                    incomingConnection.send({ type: 'storage_init', storage: this.#storage });
                 } catch (error) {
                     console.error(ERROR_PREFIX + "Error sending initial storage sync:", error);
                     this.#triggerEvent("error", "Error sending initial storage sync: " + error);
@@ -249,7 +249,7 @@ export default class PlayPeer {
 
                 switch (data.type) {
                     case 'storage_update':
-                        // Storage updates, sent out by clients
+                        // Storage updates, sent out by clients (no value check since setting to null is ok)
                         if (this.#isHost && data.key) this.updateStorage(data.key, data.value);
                         break;
                     case 'heartbeat_request': {
@@ -267,7 +267,7 @@ export default class PlayPeer {
                     case 'array_update': {
                         // Perform array updates on host to avoid race conditions
                         this.#handleArrayUpdate(data.key, data.operation, data.value, data.updateValue);
-                        this.#broadcastMessage("storage_sync", { storage: this.#storage });
+                        this.#broadcastMessage("storage_sync", { key: data.key, value: this.#storage[data.key] });
                         break;
                     }
                 }
@@ -386,10 +386,14 @@ export default class PlayPeer {
                 this.#outgoingConnection.on('data', (data) => {
                     if (!data || !data?.type) return;
                     switch (data.type) {
+                        case 'storage_init':
+                            this.#storage = data.storage;
+                            this.#triggerEvent("storageUpdated", { ...this.#storage });
+                            break;
                         case 'storage_sync':
                             // Update storage with host sync only if local save isn't identical
-                            if (JSON.stringify(this.#storage) !== JSON.stringify(data.storage)) {
-                                this.#storage = data.storage;
+                            if (JSON.stringify(this.#storage[data.key]) !== JSON.stringify(data.value)) {
+                                this.#storage[data.key] = data.value;
                                 this.#triggerEvent("storageUpdated", { ...this.#storage });
                             }
                             break;
@@ -433,7 +437,7 @@ export default class PlayPeer {
         if (JSON.stringify(this.#storage[key]) === JSON.stringify(value)) return; // If the key already has this value, exit
         if (this.#isHost) {
             this.#setStorageLocally(key, value);
-            this.#broadcastMessage("storage_sync", { storage: this.#storage });
+            this.#broadcastMessage("storage_sync", { key, value });
         } else {
             try {
                 if (this.#outgoingConnection?.open) {
@@ -485,7 +489,6 @@ export default class PlayPeer {
                     }
                     return item === value; // Strict equality for primitives
                 });
-
                 if (uniqueIndex == -1) updatedArray.push(value); // Add the unique value
                 break;
 
@@ -507,15 +510,12 @@ export default class PlayPeer {
                     }
                     return item === value; // Strict equality for primitives
                 });
-
-                if (updateIndex > -1) {
-                    updatedArray[updateIndex] = updateValue; // Perform the update
-                }
+                if (updateIndex > -1) updatedArray[updateIndex] = updateValue; // Perform the update
                 break;
 
             default:
                 console.error(ERROR_PREFIX + `Unknown array operation: ${operation}`);
-                this.#triggerEvent("error", `Unknown array operation: ${operation}`);
+                return;
         }
 
         this.#setStorageLocally(key, updatedArray); // Update storage locally
@@ -531,7 +531,7 @@ export default class PlayPeer {
     updateStorageArray(key, operation, value, updateValue) {
         if (this.#isHost) {
             this.#handleArrayUpdate(key, operation, value, updateValue);
-            this.#broadcastMessage("storage_sync", { storage: this.#storage });
+            this.#broadcastMessage("storage_sync", { key, value: this.#storage?.[key] });
         } else {
             try {
                 // Request the host to perform the operation
