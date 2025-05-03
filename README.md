@@ -50,17 +50,17 @@ peer.onEvent('storageUpdate', storage => console.log('Storage update received:',
 // Initialize the peer
 await peer.init();
 
-// Create a new room
+// Create a new room (with ptional inital storage data)
 const hostId = await peer.createRoom({
     players: [],
 });
 
-// Or, join room
+// Join an existing room
 await peer.joinRoom('host-peer-id'); // Rejects if connection fails or times out
 
-// Interact with the synced storage
+// Interact with the synced storage (available if in room)
 const currentState = peer.getStorage;
-peer.updateStorageArray('players', 'add-unique', { username: 'PeerEnjoyer4', level: 2 }); // Special method to enable simultaneous storage updates for arrays
+peer.updateStorageArray('players', 'add-unique', { username: 'PeerEnjoyer4', level: 2 }); // Special method to enable safe, simultaneous storage updates for arrays
 peer.updateStorage('latestPlayer', 'PeerEnjoyer4'); // Regular synced storage update
 
 // To leave the room, destroy the instance
