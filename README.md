@@ -106,7 +106,7 @@ Creates a new PlayPeer instance with a specified peer ID and [PeerJS options](ht
 - `outgoingPeerDisconnected`: Disconnected from host (returns peer-id `string`)
 - `outgoingPeerError`: Host connection error (returns peer-id `string`)
 
-### Properties
+### Properties (Read-only)
 
 The `id` is used to distinguish the peer from other peers on the signalling server. 
 Using a uuid is recommended, but it is also fine to use any other random string. If you're using a public signalling server instance, including
