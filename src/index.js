@@ -250,7 +250,10 @@ export default class PlayPeer {
                 switch (data.type) {
                     case 'storage_update':
                         // Storage updates, sent out by clients (no value check since setting to null is ok)
-                        if (this.#isHost && data.key) this.updateStorage(data.key, data.value);
+                        if (data.key && JSON.stringify(this.#storage[data.key]) !== JSON.stringify(data.value)) {
+                            this.#setStorageLocally(data.key, data.value);
+                            this.#broadcastMessage("storage_sync", { key: data.key, value: data.value });
+                        }
                         break;
                     case 'heartbeat_request': {
                         // Respond to peers requesting heartbeat
@@ -265,9 +268,13 @@ export default class PlayPeer {
                         break;
                     }
                     case 'array_update': {
-                        // Perform array updates on host to avoid race conditions
-                        this.#handleArrayUpdate(data.key, data.operation, data.value, data.updateValue);
-                        this.#broadcastMessage("storage_sync", { key: data.key, value: this.#storage[data.key] });
+                        // Perform array updates on host to mitigate race conditions
+                        if (!data.key) return;
+                        const updatedArray = this.#handleArrayUpdate(data.key, data.operation, data.value, data.updateValue);
+                        if (JSON.stringify(updatedArray) !== JSON.stringify(this.#storage[data.key])) {
+                            this.#setStorageLocally(data.key, updatedArray);
+                            this.#broadcastMessage("storage_sync", { key: data.key, value: updatedArray });
+                        }
                         break;
                     }
                 }
@@ -434,7 +441,7 @@ export default class PlayPeer {
      * @param {*} value - New value
      */
     updateStorage(key, value) {
-        if (JSON.stringify(this.#storage[key]) === JSON.stringify(value)) return; // If the key already has this value, exit
+        if (JSON.stringify(this.#storage[key]) === JSON.stringify(value)) return; // Prevent updates without changes
         if (this.#isHost) {
             this.#setStorageLocally(key, value);
             this.#broadcastMessage("storage_sync", { key, value });
@@ -473,52 +480,33 @@ export default class PlayPeer {
      * @param {*} updateValue
      */
     #handleArrayUpdate(key, operation, value, updateValue) {
-        let updatedArray = this.#storage?.[key] || [];
-        if (!Array.isArray(this.#storage?.[key])) this.#storage[key] = []; // Ensure it's an array if it wasn't already
+        let array = (!this.#storage[key] || !Array.isArray(this.#storage[key])) ? [] : [...this.#storage[key]];
+        const isObject = typeof value === 'object' && value !== null;
+        const compare = (item) => isObject ? JSON.stringify(item) === JSON.stringify(value) : item === value;
 
         switch (operation) {
             case 'add':
-                updatedArray.push(value);
+                array.push(value);
                 break;
 
             case 'add-unique':
-                // Check if the value already exists (deep comparison for objects)
-                const uniqueIndex = updatedArray.findIndex(item => {
-                    if (typeof value === 'object' && value !== null) {
-                        return JSON.stringify(item) === JSON.stringify(value);
-                    }
-                    return item === value; // Strict equality for primitives
-                });
-                if (uniqueIndex == -1) updatedArray.push(value); // Add the unique value
+                if (!array.some(compare)) array.push(value);
                 break;
 
             case 'remove-matching':
-                // Remove matching value (deep comparison for objects)
-                updatedArray = updatedArray.filter(item => {
-                    if (typeof value === 'object' && value !== null) {
-                        return JSON.stringify(item) !== JSON.stringify(value);
-                    }
-                    return item !== value; // Strict equality for primitives
-                });
+                array = array.filter(item => !compare(item));
                 break;
 
             case 'update-matching':
-                // Find and update the matching value (deep comparison for objects)
-                const updateIndex = updatedArray.findIndex(item => {
-                    if (typeof value === 'object' && value !== null) {
-                        return JSON.stringify(item) === JSON.stringify(value);
-                    }
-                    return item === value; // Strict equality for primitives
-                });
-                if (updateIndex > -1) updatedArray[updateIndex] = updateValue; // Perform the update
+                const index = array.findIndex(compare);
+                if (index !== -1) array[index] = updateValue;
                 break;
 
             default:
                 console.error(ERROR_PREFIX + `Unknown array operation: ${operation}`);
-                return;
         }
 
-        this.#setStorageLocally(key, updatedArray); // Update storage locally
+        return array;
     }
 
     /**
@@ -529,8 +517,10 @@ export default class PlayPeer {
      * @param {* | undefined} updateValue 
      */
     updateStorageArray(key, operation, value, updateValue) {
+        const updatedArray = this.#handleArrayUpdate(key, operation, value, updateValue);
+        if (JSON.stringify(this.#storage[key]) === JSON.stringify(updatedArray)) return; // Prevent updates without changes
         if (this.#isHost) {
-            this.#handleArrayUpdate(key, operation, value, updateValue);
+            this.#setStorageLocally(key, updatedArray);
             this.#broadcastMessage("storage_sync", { key, value: this.#storage?.[key] });
         } else {
             try {
@@ -544,7 +534,7 @@ export default class PlayPeer {
                         updateValue
                     });
                 }
-                this.#handleArrayUpdate(key, operation, value, updateValue); // Optimistic update
+                this.#setStorageLocally(key, updatedArray); // Optimistic update
             } catch (error) {
                 console.error(ERROR_PREFIX + `Failed to send array update to host:`, error);
                 this.#triggerEvent("error", `Failed to send array update to host: ${error}`);
