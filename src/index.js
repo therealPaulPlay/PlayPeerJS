@@ -255,7 +255,7 @@ export default class PlayPeer {
                         const hostTimestamp = this.#storageTimestamps[data.key] || 0;
                         if (data.key && data.timestamp > hostTimestamp && JSON.stringify(this.#storage[data.key]) !== JSON.stringify(data.value)) {
                             this.#setStorageLocally(data.key, data.value, data.timestamp);
-                            this.#broadcastMessage("storage_sync", { key: data.key, value: data.value, timestamp: data.timestamp }, incomingConnection.peer);
+                            this.#broadcastMessage("storage_sync", { key: data.key, value: data.value, timestamp: data.timestamp });
                         }
                         break;
                     case 'heartbeat_request': {
@@ -276,7 +276,7 @@ export default class PlayPeer {
                         const updatedArray = this.#handleArrayUpdate(data.key, data.operation, data.value, data.updateValue);
                         if (JSON.stringify(updatedArray) !== JSON.stringify(this.#storage[data.key])) {
                             this.#setStorageLocally(data.key, updatedArray, data.timestamp);
-                            this.#broadcastMessage("storage_operation", { key: data.key, operation: data.operation, value: data.value, updateValue: data.updateValue, timestamp: data.timestamp }, incomingConnection.peer);
+                            this.#broadcastMessage("storage_sync", { key: data.key, value: updatedArray, timestamp: data.timestamp });
                         }
                         break;
                     }
@@ -403,6 +403,7 @@ export default class PlayPeer {
                             this.#hostTimeOffset = data.hostTime - Date.now();
                             this.#triggerEvent("storageUpdated", { ...this.#storage });
                             break;
+
                         case 'storage_sync':
                             // Update storage with host sync only if local save isn't identical
                             const localTimestamp = this.#storageTimestamps[data.key] || 0;
@@ -413,15 +414,6 @@ export default class PlayPeer {
                             }
                             break;
 
-                        case 'storage_operation':
-                            // Update storage with host sync only if local save isn't identical (no timestamp check for unordered operations)
-                            const updatedArray = this.#handleArrayUpdate(data.key, data.operation, data.value, data.updateValue);
-                            if (JSON.stringify(this.#storage[data.key]) !== JSON.stringify(updatedArray)) {
-                                this.#storage[data.key] = updatedArray;
-                                this.#storageTimestamps[data.key] = data.timestamp;
-                                this.#triggerEvent("storageUpdated", { ...this.#storage });
-                            }
-                            break;
                         case 'peer_list':
                             this.#hostConnectionsIdArray = data.peers;
                             break;
@@ -544,11 +536,10 @@ export default class PlayPeer {
      * @param {* | undefined} updateValue 
      */
     updateStorageArray(key, operation, value, updateValue) {
-        const updatedArray = this.#handleArrayUpdate(key, operation, value, updateValue);
-        if (JSON.stringify(this.#storage[key]) === JSON.stringify(updatedArray)) return; // Prevent updates without changes
         if (this.#isHost) {
+            const updatedArray = this.#handleArrayUpdate(key, operation, value, updateValue);
             this.#setStorageLocally(key, updatedArray, Date.now());
-            this.#broadcastMessage("storage_operation", { key, operation, value, updateValue, timestamp: Date.now() });
+            this.#broadcastMessage("storage_sync", { key, value: updatedArray, timestamp: Date.now() });
         } else {
             try {
                 // Request the host to perform the operation
@@ -562,7 +553,6 @@ export default class PlayPeer {
                         timestamp: this.#getSyncedTimestamp()
                     });
                 }
-                this.#setStorageLocally(key, updatedArray, this.#getSyncedTimestamp()); // Optimistic update
             } catch (error) {
                 console.error(ERROR_PREFIX + `Failed to send array update to host:`, error);
                 this.#triggerEvent("error", `Failed to send array update to host: ${error}`);
@@ -575,13 +565,11 @@ export default class PlayPeer {
      * @private
      * @param {string} type - Message type (e.g., "storage_sync", "peer_list")
      * @param {object} [payload] - Additional data to send
-     * @param {string} [exceptionPeer] - Do not send a message to this peer
      */
-    #broadcastMessage(type, payload = {}, exceptionPeer) {
+    #broadcastMessage(type, payload = {}) {
         const message = { type, ...payload };
         this.#hostConnections.forEach((element) => {
             const connection = element[0];
-            if (connection.peer == exceptionPeer) return;
             if (connection?.open) {
                 try {
                     connection.send(message);
