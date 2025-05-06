@@ -20,6 +20,8 @@ export default class PlayPeer {
 
     // Logic properties
     #storage = {};
+    #storageTimestamps = {}; // Tracks update timestamps per key
+    #hostTimeOffset = 0;
     #isHost = false;
     #hostConnections = []; // Host-side array containing all peers connected to current host, send out IDs to clients
     #hostConnectionsIdArray = []; // Client-side array to store the host's connections' IDs.
@@ -91,7 +93,7 @@ export default class PlayPeer {
     */
     async init() {
         return new Promise((resolve, reject) => {
-            if (this.#peer) return console.error(ERROR_PREFIX + "Instance already initialized!");
+            if (this.#peer) return reject(new Error("Instance already initialized!"));
             if (!this.#id) console.warn(ERROR_PREFIX + "No id provided!");
             if (!this.#options) console.warn(ERROR_PREFIX + "No config provided! Necessary stun and turn servers missing.");
             this.#triggerEvent("status", "Initializing instance...");
@@ -237,7 +239,7 @@ export default class PlayPeer {
 
                 // Send current storage state to new peer
                 try {
-                    incomingConnection.send({ type: 'storage_init', storage: this.#storage });
+                    incomingConnection.send({ type: 'storage_init', storage: this.#storage, timestamps: this.#storageTimestamps, hostTime: Date.now() });
                 } catch (error) {
                     console.error(ERROR_PREFIX + "Error sending initial storage sync:", error);
                     this.#triggerEvent("error", "Error sending initial storage sync: " + error);
@@ -250,9 +252,10 @@ export default class PlayPeer {
                 switch (data.type) {
                     case 'storage_update':
                         // Storage updates, sent out by clients (no value check since setting to null is ok)
-                        if (data.key && JSON.stringify(this.#storage[data.key]) !== JSON.stringify(data.value)) {
-                            this.#setStorageLocally(data.key, data.value);
-                            this.#broadcastMessage("storage_sync", { key: data.key, value: data.value });
+                        const hostTimestamp = this.#storageTimestamps[data.key] || 0;
+                        if (data.key && data.timestamp > hostTimestamp && JSON.stringify(this.#storage[data.key]) !== JSON.stringify(data.value)) {
+                            this.#setStorageLocally(data.key, data.value, data.timestamp);
+                            this.#broadcastMessage("storage_sync", { key: data.key, value: data.value, timestamp: data.timestamp }, incomingConnection.peer);
                         }
                         break;
                     case 'heartbeat_request': {
@@ -272,8 +275,8 @@ export default class PlayPeer {
                         if (!data.key) return;
                         const updatedArray = this.#handleArrayUpdate(data.key, data.operation, data.value, data.updateValue);
                         if (JSON.stringify(updatedArray) !== JSON.stringify(this.#storage[data.key])) {
-                            this.#setStorageLocally(data.key, updatedArray);
-                            this.#broadcastMessage("storage_sync", { key: data.key, value: updatedArray });
+                            this.#setStorageLocally(data.key, updatedArray, data.timestamp);
+                            this.#broadcastMessage("storage_operation", { key: data.key, operation: data.operation, value: data.value, updateValue: data.updateValue, timestamp: data.timestamp }, incomingConnection.peer);
                         }
                         break;
                     }
@@ -333,9 +336,10 @@ export default class PlayPeer {
                 this.#triggerEvent("status", "Connecting to host...");
 
                 // In case peer experiences error joining room, reject promise
-                this.#peer.on('error', (error) => {
-                    reject(new Error("Error occured trying to join room: " + error));
+                this.#peer.once('error', error => {
+                    reject(new Error("Error occurred trying to join room: " + error));
                 });
+
 
                 // Connection timeout
                 let timeout;
@@ -395,12 +399,26 @@ export default class PlayPeer {
                     switch (data.type) {
                         case 'storage_init':
                             this.#storage = data.storage;
+                            this.#storageTimestamps = data.timestamps;
+                            this.#hostTimeOffset = data.hostTime - Date.now();
                             this.#triggerEvent("storageUpdated", { ...this.#storage });
                             break;
                         case 'storage_sync':
                             // Update storage with host sync only if local save isn't identical
-                            if (JSON.stringify(this.#storage[data.key]) !== JSON.stringify(data.value)) {
+                            const localTimestamp = this.#storageTimestamps[data.key] || 0;
+                            if (data.timestamp > localTimestamp && JSON.stringify(this.#storage[data.key]) !== JSON.stringify(data.value)) {
                                 this.#storage[data.key] = data.value;
+                                this.#storageTimestamps[data.key] = data.timestamp;
+                                this.#triggerEvent("storageUpdated", { ...this.#storage });
+                            }
+                            break;
+
+                        case 'storage_operation':
+                            // Update storage with host sync only if local save isn't identical (no timestamp check for unordered operations)
+                            const updatedArray = this.#handleArrayUpdate(data.key, data.operation, data.value, data.updateValue);
+                            if (JSON.stringify(this.#storage[data.key]) !== JSON.stringify(updatedArray)) {
+                                this.#storage[data.key] = updatedArray;
+                                this.#storageTimestamps[data.key] = data.timestamp;
                                 this.#triggerEvent("storageUpdated", { ...this.#storage });
                             }
                             break;
@@ -422,14 +440,12 @@ export default class PlayPeer {
                 this.#outgoingConnection.on('error', (error) => {
                     clearTimeout(timeout);
                     this.#triggerEvent("outgoingPeerError", hostId);
-                    console.error(ERROR_PREFIX + `Host connection error:`, error);
                     this.#triggerEvent("error", "Error in host connection: " + error);
-                    reject(error);
+                    console.error(ERROR_PREFIX + `Host connection error:`, error);
                 });
             } catch (error) {
-                console.error(ERROR_PREFIX + "Error connecting to host:", error);
-                this.#triggerEvent("error", "Error connecting to host: " + error);
-                reject(error);
+                console.error(ERROR_PREFIX + "Error in connection to host:", error);
+                this.#triggerEvent("error", "Error in connection to host: " + error);
             }
         });
     }
@@ -443,22 +459,23 @@ export default class PlayPeer {
     updateStorage(key, value) {
         if (JSON.stringify(this.#storage[key]) === JSON.stringify(value)) return; // Prevent updates without changes
         if (this.#isHost) {
-            this.#setStorageLocally(key, value);
-            this.#broadcastMessage("storage_sync", { key, value });
+            this.#setStorageLocally(key, value, Date.now());
+            this.#broadcastMessage("storage_sync", { key, value, timestamp: Date.now() });
         } else {
             try {
                 if (this.#outgoingConnection?.open) {
                     this.#outgoingConnection?.send({
                         type: 'storage_update',
                         key,
-                        value
+                        value,
+                        timestamp: this.#getSyncedTimestamp()
                     });
                 }
             } catch (error) {
                 console.error(ERROR_PREFIX + "Error sending storage update to host:", error);
                 this.#triggerEvent("error", "Error sending storage update to host: " + error);
             }
-            this.#setStorageLocally(key, value); // Optimistic update for non-host peers Ref: https://medium.com/@kyledeguzmanx/what-are-optimistic-updates-483662c3e171
+            this.#setStorageLocally(key, value, this.#getSyncedTimestamp()); // Optimistic update for non-host peers Ref: https://medium.com/@kyledeguzmanx/what-are-optimistic-updates-483662c3e171
         }
     }
 
@@ -466,9 +483,19 @@ export default class PlayPeer {
      * Update local storage and trigger callback
      * @private
      */
-    #setStorageLocally(key, value) {
+    #setStorageLocally(key, value, timestamp) {
         this.#storage[key] = value;
+        this.#storageTimestamps[key] = timestamp;
         this.#triggerEvent("storageUpdated", { ...this.#storage });
+    }
+
+    /**
+     * Get synchronized timestamp (based on the host's time)
+     * This is important since many devices have desynced clocks
+     * @private
+     */
+    #getSyncedTimestamp() {
+        return Date.now() + this.#hostTimeOffset;
     }
 
     /**
@@ -520,8 +547,8 @@ export default class PlayPeer {
         const updatedArray = this.#handleArrayUpdate(key, operation, value, updateValue);
         if (JSON.stringify(this.#storage[key]) === JSON.stringify(updatedArray)) return; // Prevent updates without changes
         if (this.#isHost) {
-            this.#setStorageLocally(key, updatedArray);
-            this.#broadcastMessage("storage_sync", { key, value: this.#storage?.[key] });
+            this.#setStorageLocally(key, updatedArray, Date.now());
+            this.#broadcastMessage("storage_operation", { key, operation, value, updateValue, timestamp: Date.now() });
         } else {
             try {
                 // Request the host to perform the operation
@@ -531,10 +558,11 @@ export default class PlayPeer {
                         key,
                         operation,
                         value,
-                        updateValue
+                        updateValue,
+                        timestamp: this.#getSyncedTimestamp()
                     });
                 }
-                this.#setStorageLocally(key, updatedArray); // Optimistic update
+                this.#setStorageLocally(key, updatedArray, this.#getSyncedTimestamp()); // Optimistic update
             } catch (error) {
                 console.error(ERROR_PREFIX + `Failed to send array update to host:`, error);
                 this.#triggerEvent("error", `Failed to send array update to host: ${error}`);
@@ -547,11 +575,13 @@ export default class PlayPeer {
      * @private
      * @param {string} type - Message type (e.g., "storage_sync", "peer_list")
      * @param {object} [payload] - Additional data to send
+     * @param {string} [exceptionPeer] - Do not send a message to this peer
      */
-    #broadcastMessage(type, payload = {}) {
+    #broadcastMessage(type, payload = {}, exceptionPeer) {
         const message = { type, ...payload };
         this.#hostConnections.forEach((element) => {
             const connection = element[0];
+            if (connection.peer == exceptionPeer) return;
             if (connection?.open) {
                 try {
                     connection.send(message);
@@ -622,6 +652,8 @@ export default class PlayPeer {
             // Resets
             this.#peer = undefined;
             this.#storage = {};
+            this.#storageTimestamps = {};
+            this.#hostTimeOffset = 0;
             this.#isHost = false;
             this.#hostConnections = [];
             this.#hostConnectionsIdArray = [];
