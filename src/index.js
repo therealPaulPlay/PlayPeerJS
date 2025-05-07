@@ -275,8 +275,8 @@ export default class PlayPeer {
                         if (!data.key) return;
                         const updatedArray = this.#handleArrayUpdate(data.key, data.operation, data.value, data.updateValue);
                         if (JSON.stringify(updatedArray) !== JSON.stringify(this.#storage[data.key])) {
-                            this.#setStorageLocally(data.key, updatedArray, data.timestamp);
-                            this.#broadcastMessage("storage_sync", { key: data.key, value: updatedArray, timestamp: data.timestamp });
+                            this.#setStorageLocally(data.key, updatedArray, Date.now());
+                            this.#broadcastMessage("storage_sync", { key: data.key, operation: data.operation, value: data.value, updateValue: data.updateValue, timestamp: Date.now() }, incomingConnection.peer);
                         }
                         break;
                     }
@@ -414,6 +414,16 @@ export default class PlayPeer {
                             }
                             break;
 
+                        case 'storage_operation':
+                            // Update storage with host sync only if local save isn't identical (no timestamp check for unordered operations)
+                            const updatedArray = this.#handleArrayUpdate(data.key, data.operation, data.value, data.updateValue);
+                            if (JSON.stringify(this.#storage[data.key]) !== JSON.stringify(updatedArray)) {
+                                this.#storage[data.key] = updatedArray;
+                                this.#storageTimestamps[data.key] = data.timestamp;
+                                this.#triggerEvent("storageUpdated", { ...this.#storage });
+                            }
+                            break;
+
                         case 'peer_list':
                             this.#hostConnectionsIdArray = data.peers;
                             break;
@@ -536,10 +546,11 @@ export default class PlayPeer {
      * @param {* | undefined} updateValue 
      */
     updateStorageArray(key, operation, value, updateValue) {
+        const updatedArray = this.#handleArrayUpdate(key, operation, value, updateValue);
+        if (JSON.stringify(this.#storage[key]) === JSON.stringify(updatedArray)) return; // Prevent updates without changes
         if (this.#isHost) {
-            const updatedArray = this.#handleArrayUpdate(key, operation, value, updateValue);
             this.#setStorageLocally(key, updatedArray, Date.now());
-            this.#broadcastMessage("storage_sync", { key, value: updatedArray, timestamp: Date.now() });
+            this.#broadcastMessage("storage_operation", { key, operation, value, updateValue, timestamp: Date.now() });
         } else {
             try {
                 // Request the host to perform the operation
@@ -549,14 +560,14 @@ export default class PlayPeer {
                         key,
                         operation,
                         value,
-                        updateValue,
-                        timestamp: this.#getSyncedTimestamp()
+                        updateValue
                     });
                 }
             } catch (error) {
                 console.error(ERROR_PREFIX + `Failed to send array update to host:`, error);
                 this.#triggerEvent("error", `Failed to send array update to host: ${error}`);
             }
+            this.#setStorageLocally(key, updatedArray, this.#getSyncedTimestamp()); // Optimistic update
         }
     }
 
@@ -565,11 +576,13 @@ export default class PlayPeer {
      * @private
      * @param {string} type - Message type (e.g., "storage_sync", "peer_list")
      * @param {object} [payload] - Additional data to send
+     * @param {string} [exceptionPeer] - Do not send a message to this peer
      */
-    #broadcastMessage(type, payload = {}) {
+    #broadcastMessage(type, payload = {}, exceptionPeer) {
         const message = { type, ...payload };
         this.#hostConnections.forEach((element) => {
             const connection = element[0];
+            if (connection.peer === exceptionPeer) return;
             if (connection?.open) {
                 try {
                     connection.send(message);
@@ -666,7 +679,7 @@ export default class PlayPeer {
      *  @returns {object} Get storage object
      */
     get getStorage() {
-        return { ...this.#storage } || {};
+        return JSON.parse(JSON.stringify(this.#storage));
     }
 
     /**
