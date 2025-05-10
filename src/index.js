@@ -114,7 +114,6 @@ export default class PlayPeer {
             let connectionOpenTimeout;
 
             connectionOpenTimeout = setTimeout(() => {
-                console.error(ERROR_PREFIX + "Connection attempt to signalling server timed out.");
                 this.#triggerEvent("error", "Connection attempt to singalling server timed out.");
                 this.destroy();
                 reject(new Error("Connection attempt to signalling server timed out."));
@@ -141,14 +140,12 @@ export default class PlayPeer {
                     console.warn(WARNING_PREFIX + "Disconnected from signalling server. Attempting to reconnect.");
                     this.#triggerEvent("status", "Disconnected from signalling server...");
                 } catch (error) {
-                    console.error(ERROR_PREFIX + "Failed to reconnect:", error);
                     this.#triggerEvent("error", "Failed to reconnect: " + error);
                 }
             }
         });
 
         this.#peer.on('error', (error) => {
-            console.error(ERROR_PREFIX + `Error of type '${error?.type}':`, error);
             this.#triggerEvent("error", `Error of type '${error?.type}': ` + error); // Don't destroy here - it's either done automatically (including on browser reload) or unnecessary
         });
 
@@ -184,7 +181,6 @@ export default class PlayPeer {
             console.warn(WARNING_PREFIX + `Connection ${incomingConnection.peer} rejected - room is full.`);
             this.#triggerEvent("status", "Rejected connection - room is full.");
             try { incomingConnection.close(); } catch (error) {
-                console.error(ERROR_PREFIX + "Failed to close incoming connection (room full):", error);
                 this.#triggerEvent("error", "Failed to close incoming connection (room full): " + error);
             }
             return; // Don't continue with the rest of events
@@ -195,7 +191,6 @@ export default class PlayPeer {
             if (!incomingConnection.open || !this.#isHost) {
                 console.warn(WARNING_PREFIX + `Connection ${incomingConnection?.peer} closed - ${this.#isHost ? "did not open" : "not hosting"}.`);
                 try { incomingConnection.close(); } catch (error) {
-                    console.error(ERROR_PREFIX + "Failed to close incoming connection (invalid):", error);
                     this.#triggerEvent("error", "Failed to close incoming connection (invalid): " + error);
                 }
             }
@@ -220,7 +215,6 @@ export default class PlayPeer {
                             console.warn(WARNING_PREFIX + "Peer did not send heartbeats - closing connection.");
                             this.#triggerEvent("status", "Peer did not send heartbeats - closing connection.");
                             try { e[0]?.close(); } catch (error) {
-                                console.error(ERROR_PREFIX + "Failed to close incoming connection (no heartbeat):", error);
                                 this.#triggerEvent("error", "Failed to close incoming connection (no heartbeat): " + error);
                             }
                             this.#removeIncomingConnectionFromArray(e[0]); // Remove the entry now, regardless if the close worked
@@ -241,7 +235,6 @@ export default class PlayPeer {
                 try {
                     incomingConnection.send({ type: 'storage_init', storage: this.#storage, timestamps: this.#storageTimestamps, hostTime: Date.now() });
                 } catch (error) {
-                    console.error(ERROR_PREFIX + "Error sending initial storage sync:", error);
                     this.#triggerEvent("error", "Error sending initial storage sync: " + error);
                 }
             });
@@ -265,7 +258,6 @@ export default class PlayPeer {
                             const index = this.#hostConnections.findIndex(e => e[0] == incomingConnection);
                             if (index !== -1) this.#hostConnections[index][1] = Date.now(); // Update last heartbeat to now
                         } catch (error) {
-                            console.error(ERROR_PREFIX + "Error responding to heartbeat:", error);
                             this.#triggerEvent("error", "Error responding to heartbeat: " + error);
                         }
                         break;
@@ -291,7 +283,6 @@ export default class PlayPeer {
 
             incomingConnection.on('error', (error) => {
                 this.#triggerEvent("incomingPeerError", incomingConnection.peer);
-                console.error(ERROR_PREFIX + `Connection ${incomingConnection.peer} error:`, error);
                 this.#triggerEvent("error", "Error in incoming connection: " + error);
             });
         }
@@ -349,7 +340,6 @@ export default class PlayPeer {
                         this.#outgoingConnection.close();
                         this.#outgoingConnection = null;
                     }
-                    console.error(ERROR_PREFIX + "Connection attempt for joining room timed out.");
                     this.#triggerEvent("status", "Connection attempt for joining room timed out.");
                     reject(new Error("Connection attempt for joining room timed out."));
                 }, 5 * 1000);
@@ -443,10 +433,8 @@ export default class PlayPeer {
                     clearTimeout(timeout);
                     this.#triggerEvent("outgoingPeerError", hostId);
                     this.#triggerEvent("error", "Error in host connection: " + error);
-                    console.error(ERROR_PREFIX + `Host connection error:`, error);
                 });
             } catch (error) {
-                console.error(ERROR_PREFIX + "Error in connection to host:", error);
                 this.#triggerEvent("error", "Error in connection to host: " + error);
             }
         });
@@ -474,7 +462,6 @@ export default class PlayPeer {
                     });
                 }
             } catch (error) {
-                console.error(ERROR_PREFIX + "Error sending storage update to host:", error);
                 this.#triggerEvent("error", "Error sending storage update to host: " + error);
             }
             this.#setStorageLocally(key, value, this.#getSyncedTimestamp()); // Optimistic update for non-host peers Ref: https://medium.com/@kyledeguzmanx/what-are-optimistic-updates-483662c3e171
@@ -564,7 +551,6 @@ export default class PlayPeer {
                     });
                 }
             } catch (error) {
-                console.error(ERROR_PREFIX + `Failed to send array update to host:`, error);
                 this.#triggerEvent("error", `Failed to send array update to host: ${error}`);
             }
             this.#setStorageLocally(key, updatedArray, this.#getSyncedTimestamp()); // Optimistic update
@@ -587,7 +573,6 @@ export default class PlayPeer {
                 try {
                     connection.send(message);
                 } catch (error) {
-                    console.error(ERROR_PREFIX + `Failed to send broadcast message to peer ${connection?.peer}:`, error);
                     this.#triggerEvent("error", `Failed to send broadcast message to peer ${connection?.peer}: ${error}`);
                 }
             }
@@ -637,34 +622,33 @@ export default class PlayPeer {
      * Clean up and destroy peer
      */
     destroy() {
-        try {
-            if (this.#peer) {
+        if (this.#peer) {
+            try {
                 if (!this.#peer?.destroyed) this.#peer.destroy();
-
-                // Trigger events
-                this.#triggerEvent("status", "Destroyed.");
-                this.#triggerEvent("instanceDestroyed");
+            } catch (error) {
+                this.#triggerEvent("error", "Error destroying peer: " + error);
             }
 
-            // Clear intervals
-            clearInterval(this.#heartbeatSendInterval);
-            clearInterval(this.#heartbeatHostCheckInterval);
-
-            // Resets
-            this.#peer = undefined;
-            this.#storage = {};
-            this.#storageTimestamps = {};
-            this.#hostTimeOffset = 0;
-            this.#isHost = false;
-            this.#hostConnections = [];
-            this.#hostConnectionsIdArray = [];
-            this.#initialized = false;
-            this.#maxSize = undefined;
-            this.#callbacks.clear();
-        } catch (error) {
-            console.error(ERROR_PREFIX + "Error during cleanup:", error);
-            this.#triggerEvent("error", "Error during cleanup: " + error);
+            // Trigger events
+            this.#triggerEvent("status", "Destroyed.");
+            this.#triggerEvent("instanceDestroyed");
         }
+
+        // Clear intervals
+        clearInterval(this.#heartbeatSendInterval);
+        clearInterval(this.#heartbeatHostCheckInterval);
+
+        // Resets
+        this.#peer = undefined;
+        this.#storage = {};
+        this.#storageTimestamps = {};
+        this.#hostTimeOffset = 0;
+        this.#isHost = false;
+        this.#hostConnections = [];
+        this.#hostConnectionsIdArray = [];
+        this.#initialized = false;
+        this.#maxSize = undefined;
+        this.#callbacks.clear();
     }
 
     /**

@@ -64,6 +64,7 @@
                 }
             });
             peer.onEvent('status', status => console.log('Status:', status));
+            peer.onEvent('error', error => console.log('Error:', error));
             peer.onEvent('storageUpdated', (storage) => {
                 const messages = document.getElementById('messages');
                 messages.innerHTML = storage.messages?.map(msg =>
