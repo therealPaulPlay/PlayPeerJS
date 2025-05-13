@@ -1,4 +1,5 @@
 import { Peer } from 'peerjs';
+import { CRDTManager } from './crdtManager';
 
 const ERROR_PREFIX = "PlayPeer error: ";
 const WARNING_PREFIX = "PlayPeer warning: ";
@@ -14,14 +15,12 @@ export default class PlayPeer {
     #options;
     #initialized = false;
     #maxSize;
+    #crdtManager;
 
     // Event callbacks stored in a map
     #callbacks = new Map();
 
     // Logic properties
-    #storage = {};
-    #storageTimestamps = {}; // Tracks update timestamps per key
-    #hostTimeOffset = 0;
     #isHost = false;
     #hostConnections = []; // Host-side array containing all peers connected to current host, send out IDs to clients
     #hostConnectionsIdArray = []; // Client-side array to store the host's connections' IDs.
@@ -40,6 +39,7 @@ export default class PlayPeer {
      */
     constructor(id, options) {
         this.#id = id;
+        this.#crdtManager = new CRDTManager(this.#id);
         if (options) this.#options = options;
     }
 
@@ -65,7 +65,6 @@ export default class PlayPeer {
 
         if (!validEvents.includes(event)) return console.warn(WARNING_PREFIX + `Invalid event type "${event}" provided to onEvent.`);
         if (!this.#callbacks.has(event)) this.#callbacks.set(event, []); // If not present, add event array
-
         this.#callbacks.get(event).push(callback); // Push callback into array
     }
 
@@ -94,8 +93,8 @@ export default class PlayPeer {
     async init() {
         return new Promise((resolve, reject) => {
             if (this.#peer) return reject(new Error("Instance already initialized!"));
-            if (!this.#id) console.warn(ERROR_PREFIX + "No id provided!");
-            if (!this.#options) console.warn(ERROR_PREFIX + "No config provided! Necessary stun and turn servers missing.");
+            if (!this.#id) return reject(ERROR_PREFIX + "No id provided!");
+            if (!this.#options) return reject(ERROR_PREFIX + "No config provided! Stun and turn servers missing.");
             this.#triggerEvent("status", "Initializing instance...");
 
             try {
@@ -103,8 +102,7 @@ export default class PlayPeer {
             } catch (error) {
                 console.error(ERROR_PREFIX + "Failed to initialize peer:", error);
                 this.#triggerEvent("error", "Failed to initialize peer: " + error);
-                reject(new Error("Failed to initialize peer."));
-                return;
+                return reject(new Error("Failed to initialize peer."));
             }
 
             this.#setupPeerErrorListeners(); // Attach event listeners
@@ -136,7 +134,7 @@ export default class PlayPeer {
         this.#peer.on('disconnected', () => {
             if (this.#peer && !this.#peer?.destroyed) {
                 try {
-                    this.#peer.reconnect();
+                    this.#peer.reconnect(); // Re-connect to the signalling server – all active peer connections should stay intact!
                     console.warn(WARNING_PREFIX + "Disconnected from signalling server. Attempting to reconnect.");
                     this.#triggerEvent("status", "Disconnected from signalling server...");
                 } catch (error) {
@@ -165,8 +163,6 @@ export default class PlayPeer {
     #removeIncomingConnectionFromArray(incomingConnection) {
         const removeIndex = this.#hostConnections.findIndex(c => c[0] === incomingConnection);
         if (removeIndex !== -1) this.#hostConnections.splice(removeIndex, 1);
-
-        // Sync host connections with peers
         const peerList = Array.from(this.#hostConnections).map(c => c[0]?.peer);
         this.#broadcastMessage("peer_list", { peers: peerList });
     }
@@ -233,7 +229,7 @@ export default class PlayPeer {
 
                 // Send current storage state to new peer
                 try {
-                    incomingConnection.send({ type: 'storage_init', storage: this.#storage, timestamps: this.#storageTimestamps, hostTime: Date.now() });
+                    incomingConnection.send({ type: 'state_init', state: this.#crdtManager.getState });
                 } catch (error) {
                     this.#triggerEvent("error", "Error sending initial storage sync: " + error);
                 }
@@ -243,12 +239,12 @@ export default class PlayPeer {
                 if (!data || !data?.type) return;
 
                 switch (data.type) {
-                    case 'storage_update':
-                        // Storage updates, sent out by clients (no value check since setting to null is ok)
-                        const hostTimestamp = this.#storageTimestamps[data.key] || 0;
-                        if (data.key && data.timestamp > hostTimestamp && JSON.stringify(this.#storage[data.key]) !== JSON.stringify(data.value)) {
-                            this.#setStorageLocally(data.key, data.value, data.timestamp);
-                            this.#broadcastMessage("storage_sync", { key: data.key, value: data.value, timestamp: data.timestamp });
+                    case 'property_update_request':
+                        // Storage updates, sent out by clients
+                        if (data.update) {
+                            this.#crdtManager.importPropertyUpdate(data.update);
+                            if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", this.getStorage);
+                            this.#broadcastMessage("property_update", { update: data.update });
                         }
                         break;
                     case 'heartbeat_request': {
@@ -259,16 +255,6 @@ export default class PlayPeer {
                             if (index !== -1) this.#hostConnections[index][1] = Date.now(); // Update last heartbeat to now
                         } catch (error) {
                             this.#triggerEvent("error", "Error responding to heartbeat: " + error);
-                        }
-                        break;
-                    }
-                    case 'array_update': {
-                        // Perform array updates on host to mitigate race conditions
-                        if (!data.key) return;
-                        const updatedArray = this.#handleArrayUpdate(data.key, data.operation, data.value, data.updateValue);
-                        if (JSON.stringify(updatedArray) !== JSON.stringify(this.#storage[data.key])) {
-                            this.#setStorageLocally(data.key, updatedArray, Date.now());
-                            this.#broadcastMessage("storage_sync", { key: data.key, operation: data.operation, value: data.value, updateValue: data.updateValue, timestamp: Date.now() }, incomingConnection.peer);
                         }
                         break;
                     }
@@ -302,10 +288,14 @@ export default class PlayPeer {
                 reject(new Error("Peer not initialized."));
             }
 
+            // Initial storage
+            Object.entries(initialStorage)?.forEach(([key, value]) => {
+                this.#crdtManager.updateProperty(key, "set", value);
+            });
+
             this.#isHost = true;
-            this.#storage = { ...initialStorage };
             this.#maxSize = maxSize; // Store the maxSize value
-            this.#triggerEvent("storageUpdated", { ...this.#storage });
+            this.#triggerEvent("storageUpdated", this.getStorage);
             this.#triggerEvent("status", `Room created${maxSize ? ` with size ${maxSize}` : ''}.`);
             resolve(this.#id);
         });
@@ -330,7 +320,6 @@ export default class PlayPeer {
                 this.#peer.once('error', error => {
                     reject(new Error("Error occurred trying to join room: " + error));
                 });
-
 
                 // Connection timeout
                 let timeout;
@@ -387,30 +376,17 @@ export default class PlayPeer {
                 this.#outgoingConnection.on('data', (data) => {
                     if (!data || !data?.type) return;
                     switch (data.type) {
-                        case 'storage_init':
-                            this.#storage = data.storage;
-                            this.#storageTimestamps = data.timestamps;
-                            this.#hostTimeOffset = data.hostTime - Date.now();
-                            this.#triggerEvent("storageUpdated", { ...this.#storage });
-                            break;
-
-                        case 'storage_sync':
-                            // Update storage with host sync only if local save isn't identical
-                            const localTimestamp = this.#storageTimestamps[data.key] || 0;
-                            if (data.timestamp > localTimestamp && JSON.stringify(this.#storage[data.key]) !== JSON.stringify(data.value)) {
-                                this.#storage[data.key] = data.value;
-                                this.#storageTimestamps[data.key] = data.timestamp;
-                                this.#triggerEvent("storageUpdated", { ...this.#storage });
+                        case 'state_init':
+                            if (data.state) {
+                                this.#crdtManager.importState(data.state);
+                                this.#triggerEvent("storageUpdated", this.getStorage);
                             }
                             break;
 
-                        case 'storage_operation':
-                            // Update storage with host sync only if local save isn't identical (no timestamp check for unordered operations)
-                            const updatedArray = this.#handleArrayUpdate(data.key, data.operation, data.value, data.updateValue);
-                            if (JSON.stringify(this.#storage[data.key]) !== JSON.stringify(updatedArray)) {
-                                this.#storage[data.key] = updatedArray;
-                                this.#storageTimestamps[data.key] = data.timestamp;
-                                this.#triggerEvent("storageUpdated", { ...this.#storage });
+                        case 'property_update':
+                            if (data.update) {
+                                this.#crdtManager.importPropertyUpdate(data.update);
+                                if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", this.getStorage);
                             }
                             break;
 
@@ -447,82 +423,22 @@ export default class PlayPeer {
      * @param {*} value - New value
      */
     updateStorage(key, value) {
-        if (JSON.stringify(this.#storage[key]) === JSON.stringify(value)) return; // Prevent updates without changes
+        const propUpdate = this.#crdtManager.updateProperty(key, "set", value); // Optimistic update
         if (this.#isHost) {
-            this.#setStorageLocally(key, value, Date.now());
-            this.#broadcastMessage("storage_sync", { key, value, timestamp: Date.now() });
+            this.#broadcastMessage("property_update", { update: propUpdate });
         } else {
             try {
                 if (this.#outgoingConnection?.open) {
                     this.#outgoingConnection?.send({
-                        type: 'storage_update',
-                        key,
-                        value,
-                        timestamp: this.#getSyncedTimestamp()
+                        type: 'property_update_request',
+                        update: propUpdate
                     });
                 }
             } catch (error) {
-                this.#triggerEvent("error", "Error sending storage update to host: " + error);
+                this.#triggerEvent("error", "Error sending property update to host: " + error);
             }
-            this.#setStorageLocally(key, value, this.#getSyncedTimestamp()); // Optimistic update for non-host peers Ref: https://medium.com/@kyledeguzmanx/what-are-optimistic-updates-483662c3e171
         }
-    }
-
-    /**
-     * Update local storage and trigger callback
-     * @private
-     */
-    #setStorageLocally(key, value, timestamp) {
-        this.#storage[key] = value;
-        this.#storageTimestamps[key] = timestamp;
-        this.#triggerEvent("storageUpdated", { ...this.#storage });
-    }
-
-    /**
-     * Get synchronized timestamp (based on the host's time)
-     * This is important since many devices have desynced clocks
-     * @private
-     */
-    #getSyncedTimestamp() {
-        return Date.now() + this.#hostTimeOffset;
-    }
-
-    /**
-     * Handle dynamic array update
-     * @private
-     * @param {string} key 
-     * @param {string} operation 
-     * @param {*} value 
-     * @param {*} updateValue
-     */
-    #handleArrayUpdate(key, operation, value, updateValue) {
-        let array = (!this.#storage[key] || !Array.isArray(this.#storage[key])) ? [] : [...this.#storage[key]];
-        const isObject = typeof value === 'object' && value !== null;
-        const compare = (item) => isObject ? JSON.stringify(item) === JSON.stringify(value) : item === value;
-
-        switch (operation) {
-            case 'add':
-                array.push(value);
-                break;
-
-            case 'add-unique':
-                if (!array.some(compare)) array.push(value);
-                break;
-
-            case 'remove-matching':
-                array = array.filter(item => !compare(item));
-                break;
-
-            case 'update-matching':
-                const index = array.findIndex(compare);
-                if (index !== -1) array[index] = updateValue;
-                break;
-
-            default:
-                console.error(ERROR_PREFIX + `Unknown array operation: ${operation}`);
-        }
-
-        return array;
+        if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", this.getStorage);
     }
 
     /**
@@ -533,42 +449,34 @@ export default class PlayPeer {
      * @param {* | undefined} updateValue 
      */
     updateStorageArray(key, operation, value, updateValue) {
-        const updatedArray = this.#handleArrayUpdate(key, operation, value, updateValue);
-        if (JSON.stringify(this.#storage[key]) === JSON.stringify(updatedArray)) return; // Prevent updates without changes
+        const propUpdate = this.#crdtManager.updateProperty(key, "array-" + operation, value, updateValue); // Optimistic update
         if (this.#isHost) {
-            this.#setStorageLocally(key, updatedArray, Date.now());
-            this.#broadcastMessage("storage_operation", { key, operation, value, updateValue, timestamp: Date.now() });
+            this.#broadcastMessage("property_update", { update: propUpdate });
         } else {
             try {
-                // Request the host to perform the operation
                 if (this.#outgoingConnection?.open) {
                     this.#outgoingConnection?.send({
-                        type: 'array_update',
-                        key,
-                        operation,
-                        value,
-                        updateValue
+                        type: 'property_update_request',
+                        update: propUpdate
                     });
                 }
             } catch (error) {
-                this.#triggerEvent("error", `Failed to send array update to host: ${error}`);
+                this.#triggerEvent("error", "Error sending property update to host: " + error);
             }
-            this.#setStorageLocally(key, updatedArray, this.#getSyncedTimestamp()); // Optimistic update
         }
+        if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", this.getStorage);
     }
 
     /**
      * Broadcast a message of a specific type to all peers. Used by host only
      * @private
-     * @param {string} type - Message type (e.g., "storage_sync", "peer_list")
+     * @param {string} type - Message type (e.g."peer_list")
      * @param {object} [payload] - Additional data to send
-     * @param {string} [exceptionPeer] - Do not send a message to this peer
      */
-    #broadcastMessage(type, payload = {}, exceptionPeer) {
+    #broadcastMessage(type, payload = {}) {
         const message = { type, ...payload };
         this.#hostConnections.forEach((element) => {
             const connection = element[0];
-            if (connection.peer === exceptionPeer) return;
             if (connection?.open) {
                 try {
                     connection.send(message);
@@ -640,9 +548,6 @@ export default class PlayPeer {
 
         // Resets
         this.#peer = undefined;
-        this.#storage = {};
-        this.#storageTimestamps = {};
-        this.#hostTimeOffset = 0;
         this.#isHost = false;
         this.#hostConnections = [];
         this.#hostConnectionsIdArray = [];
@@ -662,18 +567,12 @@ export default class PlayPeer {
     /**
      *  @returns {object} Get storage object
      */
-    get getStorage() {
-        return JSON.parse(JSON.stringify(this.#storage));
-    }
+    get getStorage() { return this.#crdtManager.getPropertyStore; }
 
     /**
     *  @returns {boolean} Check if this peer is hosting
     */
-    get isHost() {
-        return this.#isHost;
-    }
+    get isHost() { return this.#isHost; }
 
-    get id() {
-        return this.#id;
-    }
+    get id() { return this.#id; }
 }
