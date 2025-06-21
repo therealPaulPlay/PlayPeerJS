@@ -121,7 +121,7 @@ export default class PlayPeer {
                 this.#triggerEvent("status", "Connected to signalling server!");
                 clearTimeout(connectionOpenTimeout);
                 this.#initialized = true;
-                resolve();
+                resolve(this.#id);
             });
         });
     }

@@ -81,7 +81,7 @@ Creates a new PlayPeer instance with a specified peer ID and [PeerJS options](ht
 
 #### Core
 
-- `init()`: Initialize the peer connection – Returns Promise (async)
+- `init()`: Initialize the peer connection – Returns Promise (async) which resolves with the peer id
 - `createRoom(initialStorage?: object, maxSize?: number)`: Create a new room and become host – Returns Promise (async) which resolves with the host's id
 - `joinRoom(hostId: string)`: Join an existing room – Returns promise (async)
 - `destroy()`: Use this to leave a room and destroy the instance
