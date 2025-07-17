@@ -21,12 +21,10 @@ class CRDTManager {
 
     /**
      * Create a new instance
-     * @param {string} replicaId - Choose a uuid (falls back to random uuid)
      */
-    constructor(replicaId, debug) {
-        if (!replicaId) return console.error("No replicaId provided!");
+    constructor(debug) {
         if (debug) this.#debug = true;
-        this.#replicaId = replicaId;
+        this.#replicaId = crypto.randomUUID();
         this.#vectorClock.set(this.#replicaId, 0);
     }
 
@@ -69,7 +67,8 @@ class CRDTManager {
      */
     importPropertyUpdate(data) {
         try {
-            const { key, operation, vectorClock } = data;
+            const { key, operation: rawOperation, vectorClock } = data;
+            const operation = this.#sanitizeValue(rawOperation);
             if (this.#debug) console.log(CONSOLE_PREFIX + "Importing update:", data); // Debug
 
             // Get COPY of current ops (or empty array if none yet)
@@ -105,15 +104,19 @@ class CRDTManager {
     /**
      * Update a property
      * @param {string} key 
-     * @param {string} operation 
+     * @param {string} type 
      * @param {*} value 
      * @param {*} updateValue 
      * @returns {Object} - Returns the property update
      */
-    updateProperty(key, operation, value, updateValue) {
+    updateProperty(key, type, value, updateValue) {
         try {
+            // Sanitize inputs
+            value = this.#sanitizeValue(value);
+            updateValue = this.#sanitizeValue(updateValue);
+
             // Debug log
-            if (this.#debug) console.log(CONSOLE_PREFIX + `Updating property with key ${key}, operation ${operation}, value ${value} and updateValue ${updateValue}.`);
+            if (this.#debug) console.log(CONSOLE_PREFIX + `Updating property with key ${key}, type ${type}, value ${value} and updateValue ${updateValue}.`);
 
             // Increment vector clock
             const counter = this.#vectorClock.get(this.#replicaId) || 0;
@@ -123,7 +126,7 @@ class CRDTManager {
             const currentOps = [...(this.#keyOperations.get(key) || [])];
 
             // Add operation
-            const newOp = this.#createOperation({ operation, value, updateValue }, Array.from(this.#vectorClock.entries()));
+            const newOp = this.#createOperation({ type, value, updateValue }, Array.from(this.#vectorClock.entries()));
             currentOps.push(newOp);
             this.#keyOperations.set(key, currentOps); // Update the operations (no need to sort via vector clock since local updates are always the latest)
             this.#processLocalProperty(key); // Process local value
@@ -163,25 +166,25 @@ class CRDTManager {
 
             if (retainCount < operations.length) {
                 if (this.#debug) console.log(CONSOLE_PREFIX + `Running garbage collection for key ${key} with current operations:`, operations);
-                const retainOps = operations.slice(-retainCount); // newest ops
-                const removeOps = operations.slice(0, -retainCount); // oldest ops (start =  idx 0, end = retainCount counted from right side)
+                const retainOps = operations.slice(-retainCount); // Newest ops
+                const removeOps = operations.slice(0, -retainCount); // Oldest ops (start =  idx 0, end = retainCount counted from right side)
                 const baselineVectorClock = removeOps[removeOps.length - 1]?.vectorClock || []; // Use the vector clock from the last operation that we remove/overwrite 
 
                 // Calculate the value at the point where retained operations start
                 let baselineValue = null;
                 for (const op of removeOps) {
                     if (!op.data) continue;
-                    if (op.data.operation.startsWith('array') && !Array.isArray(baselineValue)) baselineValue = []; // Initialize array if required
+                    if (op.data.type.startsWith('array') && !Array.isArray(baselineValue)) baselineValue = []; // Initialize array if required
                     baselineValue = this.#handleOperation(
                         baselineValue,
-                        op.data.operation,
+                        op.data.type,
                         op.data.value,
                         op.data.updateValue
                     );
                 }
 
                 // Create a compact operation with baseline value and appropriate vector clock
-                const compactOp = this.#createOperation({ operation: "set", value: baselineValue }, baselineVectorClock);
+                const compactOp = this.#createOperation({ type: "set", value: baselineValue }, baselineVectorClock);
 
                 // Debug log
                 if (this.#debug) console.log(CONSOLE_PREFIX + "Operations after garbage collection for this key:", [compactOp, ...retainOps]);
@@ -223,10 +226,10 @@ class CRDTManager {
 
             for (const op of ops) {
                 if (!op.data) continue;
-                if (op.data.operation.startsWith('array') && !Array.isArray(value)) value = []; // Initialize array if required
+                if (op.data.type.startsWith('array') && !Array.isArray(value)) value = []; // Initialize array if required
                 value = this.#handleOperation(
                     value,
-                    op.data.operation,
+                    op.data.type,
                     op.data.value,
                     op.data.updateValue
                 );
@@ -234,11 +237,15 @@ class CRDTManager {
 
             this.#propertyStore[key] = value; // Save locally
         } catch (error) {
-            console.error(CONSOLE_PREFIX + `Failed to process property for "${key}":`, error);
+            console.error(CONSOLE_PREFIX + `Failed to process property for key ${key}:`, error);
         }
     }
 
-    // Sort by vector clock (causal order)
+    /**
+     * Sort by vector clock (causal order)
+     * @param {Array} operations
+     * @returns {Array} - Sorted operations
+     */
     #sortByVectorClock(operations) {
         return [...operations].sort((a, b) => {
             const clockA = new Map(a.vectorClock || []);
@@ -270,29 +277,34 @@ class CRDTManager {
         });
     }
 
-    // Handle an operation
-    #handleOperation(curValue, operation, value, updateValue) {
+    /**
+     * Handle an operation
+     * @param {*} curValue 
+     * @param {string} type 
+     * @param {*} value 
+     * @param {*} [updateValue]
+     * @returns {*} - Value after the operation
+     */
+    #handleOperation(curValue, type, value, updateValue) {
         try {
-            // Clone to avoid reference issues
-            curValue = JSON.parse(JSON.stringify(curValue || null));
+            // Deep copy to avoid reference issues in case value is or contains object(s)
+            curValue = structuredClone(curValue);
 
             // Set operation
-            if (operation === "set") return value;
+            if (type === "set") return value;
 
             // Array operations
-            if (operation.startsWith('array')) {
+            if (type.startsWith('array')) {
                 if (!Array.isArray(curValue)) curValue = []; // Auto-convert to array if current value isn't one
 
                 // Comparison function
                 const isObject = typeof value === 'object' && value !== null;
                 const compare = (item) => {
-                    if (isObject && typeof item === 'object' && item !== null) {
-                        return JSON.stringify(item) === JSON.stringify(value); // Deep comparison
-                    }
+                    if (isObject && typeof item === 'object' && item !== null) return JSON.stringify(item) === JSON.stringify(value); // Deep comparison
                     return item === value; // Value comparison
                 };
 
-                switch (operation) {
+                switch (type) {
                     case 'array-add':
                         curValue.push(value);
                         break;
@@ -312,15 +324,27 @@ class CRDTManager {
             return curValue;
 
         } catch (error) {
-            console.error(CONSOLE_PREFIX + `Failed to process operation with curValue ${curValue}:`, error);
+            console.error(CONSOLE_PREFIX + `Failed to handle operation with curValue ${curValue}:`, error);
             return curValue;
         }
+    }
+
+    /**
+     * Remove HTML to prevent XSS
+     * @param {Object} obj 
+     * @returns {Object} - Sanitized object
+     */
+    #sanitizeValue(obj) {
+        if (typeof obj === 'string') return (obj.includes('<') || obj.includes('>')) ? obj.replace(/[<>]/g, '') : obj;
+        if (Array.isArray(obj)) return obj.map(item => this.#sanitizeValue(item));
+        if (obj && typeof obj === 'object') return Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, this.#sanitizeValue(v)]));
+        return obj;
     }
 
     // Get property store
     get getPropertyStore() {
         try {
-            return JSON.parse(JSON.stringify(this.#propertyStore)); // Return full copy
+            return structuredClone(this.#propertyStore); // Return deep clone
         } catch {
             console.error(CONSOLE_PREFIX + "Failed to parse property store")
             return {};
@@ -331,7 +355,7 @@ class CRDTManager {
     get didPropertiesChange() {
         try {
             if (JSON.stringify(this.#propertyStore) !== JSON.stringify(this.#lastPropertyStore)) {
-                this.#lastPropertyStore = JSON.parse(JSON.stringify(this.#propertyStore));
+                this.#lastPropertyStore = structuredClone(this.#propertyStore);
                 return true;
             }
         } catch { }

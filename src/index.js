@@ -39,7 +39,7 @@ export default class PlayPeer {
      */
     constructor(id, options) {
         this.#id = id;
-        this.#crdtManager = new CRDTManager(this.#id);
+        this.#crdtManager = new CRDTManager();
         if (options) this.#options = options;
     }
 
