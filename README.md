@@ -2,12 +2,6 @@
 
 A WebRTC wrapper that simplifies peer-to-peer multiplayer game development by abstracting away connection handling and state synchronization.
 
-> [!TIP]
-> WebRTC or WebSockets – change your mind anytime.
-> Check out [PlaySocketJS](https://github.com/therealPaulPlay/PlaySocketJS), the WebSocket counterpart to PlayPeer.
-> Note: With version `^2.0.0` of PlaySocket, the API is no longer almost identical to PlayPeer,
-> so that it can take proper advantage of WebSocket perks.
-
 ## Why use PlayPeer?
 
 PlayPeer eliminates the traditional complexity of WebRTC multiplayer implementations:
