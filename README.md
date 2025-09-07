@@ -1,3 +1,8 @@
+> [!WARNING] 
+> PlayPeer is in maintenance mode. Bugs will still be fixed, but the main focus is on [PlaySocketJS](https://github.com/therealPaulPlay/PlaySocketJS).
+> WebSocket has proven to be more reliable, observable and lower latency (unless peers are in close geographical proximity).
+> PlayPeerJS is mostly viable in scenarios where keeping costs low is the most important factor.
+
 # PlayPeer
 
 A WebRTC wrapper that simplifies peer-to-peer multiplayer game development by abstracting away connection handling and state synchronization.
