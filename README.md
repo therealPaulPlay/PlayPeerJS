@@ -11,10 +11,10 @@ A WebRTC wrapper that simplifies peer-to-peer multiplayer game development by ab
 
 PlayPeer eliminates the traditional complexity of WebRTC multiplayer implementations:
 
-- **Simplified Architecture**: No need for separate server/client logic, inexpensive to host
-- **Automatic Host Migration**: Seamless host switching if the current host disconnects
-- **State Synchronization**: Built-in storage system keeps game state synchronized across all peers
-- **Resilient Connections**: Automatic reconnection handling and connection health monitoring
+- **Simplified architecture**: No need for separate server/client logic, inexpensive to host
+- **Automatic host migration**: Seamless host switching if the current host disconnects
+- **State synchronization**: Built-in storage system keeps game state synchronized across all peers
+- **Resilient connections**: Automatic reconnection handling and connection health monitoring
 
 ![Diagram explaining the difference](/resources/explanation.png)
 
@@ -58,7 +58,7 @@ const hostId = await peer.createRoom({
 await peer.joinRoom('host-peer-id'); // Rejects if connection fails or times out
 
 // Interact with the synced storage (available if in room)
-const currentState = peer.getStorage;
+const currentState = peer.storage;
 peer.updateStorageArray('players', 'add-unique', { username: 'PeerEnjoyer4', level: 2 }); // Special method to enable safe, simultaneous storage updates for arrays
 peer.updateStorage('latestPlayer', 'PeerEnjoyer4'); // Regular synced storage update
 
@@ -105,7 +105,7 @@ Creates a new PlayPeer instance with a specified peer ID and [PeerJS options](ht
 - `outgoingPeerDisconnected`: Disconnected from host (returns peer-id `string`)
 - `outgoingPeerError`: Host connection error (returns peer-id `string`)
 
-### Properties (Read-only)
+### Properties (read-only)
 
 The `id` is used to distinguish the peer from other peers on the signalling server. 
 Using a uuid is recommended, but it is also fine to use any other random string. If you're using a public signalling server instance, including
@@ -114,7 +114,7 @@ your application's name in the `id` can help to prevent overlap (e.g. your-app-0
 - `id`: Peer's unique identifier
 - `isHost`: If this peer is currently hosting or not
 - `connectionCount`: Number of active peer connections (without you)
-- `getStorage`: Retrieve storage object
+- `storage`: Retrieve storage object
 
 ## License
 

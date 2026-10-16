@@ -2,14 +2,14 @@
 
 const CONSOLE_PREFIX = "PlayPeer CRDT manager: ";
 
-class CRDTManager {
+export default class CRDTManager {
     // Storage
     #replicaId;
     #keyOperations = new Map();
     #vectorClock = new Map();
 
     // Local only
-    #propertyStore = {}; // Current local values per key, as object
+    #propertyStore = {}; // Current local values as key/value store object
     #lastPropertyStore = {}; // Last property store to compare against
 
     // Local Garbage Collection
@@ -21,6 +21,7 @@ class CRDTManager {
 
     /**
      * Create a new instance
+     * @param {boolean} [debug]
      */
     constructor(debug) {
         if (debug) this.#debug = true;
@@ -30,7 +31,7 @@ class CRDTManager {
 
     /**
      * Import the entire state of the CRDT manager (this overwrites the old state)
-     * @param {Object} state
+     * @param {Object} state - State to import
      */
     importState(state) {
         try {
@@ -48,8 +49,8 @@ class CRDTManager {
 
             // Map all operation uuids to current timestamp
             this.#keyOperations.forEach((value, key) => {
-                value?.forEach((operation) => {
-                    this.#opUuidTimestamp.set(operation?.uuid, Date.now());
+                value.forEach((operation) => {
+                    this.#opUuidTimestamp.set(operation.uuid, Date.now());
                 })
             });
 
@@ -65,11 +66,11 @@ class CRDTManager {
      * Import property update
      * @param {Object} data - Data to import
      */
-    importPropertyUpdate(data) {
+    importPropertyUpdate(update) {
         try {
-            const { key, operation: rawOperation, vectorClock } = data;
+            const { key, operation: rawOperation, vectorClock } = update;
             const operation = this.#sanitizeValue(rawOperation);
-            if (this.#debug) console.log(CONSOLE_PREFIX + "Importing update:", data); // Debug
+            if (this.#debug) console.log(CONSOLE_PREFIX + "Importing update:", update); // Debug
 
             // Get COPY of current ops (or empty array if none yet)
             const currentOps = [...(this.#keyOperations.get(key) || [])];
@@ -116,13 +117,13 @@ class CRDTManager {
             updateValue = this.#sanitizeValue(updateValue);
 
             // Debug log
-            if (this.#debug) console.log(CONSOLE_PREFIX + `Updating property with key ${key}, type ${type}, value ${value} and updateValue ${updateValue}.`);
+            if (this.#debug) console.log(CONSOLE_PREFIX + `Updating property with key ${key}, type ${type}, value ${value} and updateValue ${updateValue}`);
 
             // Increment vector clock
             const counter = this.#vectorClock.get(this.#replicaId) || 0;
             this.#vectorClock.set(this.#replicaId, counter + 1);
 
-            // Assign shallow COPY of currennt ops or fall back to empty array
+            // Assign shallow copy of current ops or fall back to empty array
             const currentOps = [...(this.#keyOperations.get(key) || [])];
 
             // Add operation
@@ -140,10 +141,13 @@ class CRDTManager {
             };
 
         } catch (error) {
-            console.error(CONSOLE_PREFIX + `Failed to add operation for key "${key}":`, error);
+            console.error(CONSOLE_PREFIX + `Failed to add operation for key ${key}:`, error);
         }
     }
 
+    /**
+     * Check if garbage collected can be performed & run it
+     */
     #checkGarbageCollection() {
         const MIN_GC_DELAY = 1000; // Minimum 1s delay between garbage collection runs
         const MIN_AGE_FOR_GC = 5000; // Garbage collect ops that are older than 5s
@@ -169,7 +173,7 @@ class CRDTManager {
                     if (this.#debug) console.log(CONSOLE_PREFIX + `Running garbage collection for key ${key} with current operations:`, operations);
                     const retainOps = operations.slice(-retainCount); // Newest ops
                     const removeOps = operations.slice(0, -retainCount); // Oldest ops (start =  idx 0, end = retainCount counted from right side)
-                    const baselineVectorClock = removeOps[removeOps.length - 1]?.vectorClock || []; // Use the vector clock from the last operation that we remove/overwrite 
+                    const baselineVectorClock = removeOps[removeOps.length - 1]?.vectorClock || []; // Use the vector clock from the last operation that we remove/overwrite
 
                     // Calculate the value at the point where retained operations start
                     let baselineValue = null;
@@ -217,12 +221,15 @@ class CRDTManager {
 
     /**
      * Process a property's value by applying all operations and set it in the property store
-     * @param {string} key 
+     * @param {string} key - Storage key
      */
     #processLocalProperty(key) {
         try {
             const ops = this.#keyOperations.get(key);
-            if (!ops?.length) return;
+            if (!ops?.length) {
+                delete this.#propertyStore[key]; // Delete empty key
+                return;
+            }
 
             // Apply all operations in order
             let value = null;
@@ -244,7 +251,7 @@ class CRDTManager {
     }
 
     /**
-     * Sort by vector clock (causal order)
+     * Sort operations by vector clock (causal order)
      * @param {Array} operations
      * @returns {Array} - Sorted operations
      */
@@ -281,45 +288,46 @@ class CRDTManager {
 
     /**
      * Handle an operation
-     * @param {*} curValue 
-     * @param {string} type 
-     * @param {*} value 
+     * @param {*} curValue
+     * @param {string} type
+     * @param {*} value
      * @param {*} [updateValue]
-     * @returns {*} - Value after the operation
+     * @returns {*} Value after the operation
      */
     #handleOperation(curValue, type, value, updateValue) {
         try {
+            // Set operation (before the structured clone, since we don't need it for it)
+            if (type === "set") return value;
+
             // Deep copy to avoid reference issues in case value is or contains object(s)
             curValue = structuredClone(curValue);
 
-            // Set operation
-            if (type === "set") return value;
-
             // Array operations
-            if (type.startsWith('array')) {
+            if (type.startsWith("array")) {
                 if (!Array.isArray(curValue)) curValue = []; // Auto-convert to array if current value isn't one
 
                 // Comparison function
-                const isObject = typeof value === 'object' && value !== null;
+                const isObject = typeof value === "object" && value !== null;
                 const compare = (item) => {
-                    if (isObject && typeof item === 'object' && item !== null) return JSON.stringify(item) === JSON.stringify(value); // Deep comparison
+                    if (isObject && typeof item === "object" && item !== null) return JSON.stringify(item) === JSON.stringify(value); // Deep comparison
                     return item === value; // Value comparison
                 };
 
                 switch (type) {
-                    case 'array-add':
+                    case "array-add":
                         curValue.push(value);
                         break;
-                    case 'array-add-unique':
+                    case "array-add-unique":
                         if (!curValue.some(compare)) curValue.push(value);
                         break;
-                    case 'array-remove-matching':
-                        curValue = curValue.filter(item => !compare(item));
+                    case "array-remove-matching":
+                        curValue = curValue.filter((item) => !compare(item));
                         break;
-                    case 'array-update-matching':
+                    case "array-update-matching": {
                         const index = curValue.findIndex(compare);
                         if (index !== -1) curValue[index] = updateValue;
                         break;
+                    }
                 }
             }
 
@@ -333,44 +341,53 @@ class CRDTManager {
 
     /**
      * Remove HTML to prevent XSS
-     * @param {Object} obj 
+     * @param {*} value 
      * @returns {Object} - Sanitized object
      */
-    #sanitizeValue(obj) {
-        if (typeof obj === 'string') return (obj.includes('<') || obj.includes('>')) ? obj.replace(/[<>]/g, '') : obj;
-        if (Array.isArray(obj)) return obj.map(item => this.#sanitizeValue(item));
-        if (obj && typeof obj === 'object') return Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, this.#sanitizeValue(v)]));
-        return obj;
+    #sanitizeValue(value) {
+        if (typeof value === 'string') return (value.includes('<') || value.includes('>')) ? value.replace(/[<>]/g, '') : value;
+        if (Array.isArray(value)) return value.map(item => this.#sanitizeValue(item));
+        if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, this.#sanitizeValue(v)]));
+        return value;
     }
 
-    // Get property store
-    get getPropertyStore() {
+    /**
+     * Get property store
+     * @returns {Object}
+     */
+    get propertyStore() {
         try {
             return structuredClone(this.#propertyStore); // Return deep clone
         } catch {
-            console.error(CONSOLE_PREFIX + "Failed to parse property store")
+            console.error(CONSOLE_PREFIX + "Failed to parse property store");
             return {};
         }
     }
 
-    // Check for changes in the local property store
+    /**
+     * Check for changes in the local property store
+     * @returns {boolean}
+     */
     get didPropertiesChange() {
         try {
             if (JSON.stringify(this.#propertyStore) !== JSON.stringify(this.#lastPropertyStore)) {
                 this.#lastPropertyStore = structuredClone(this.#propertyStore);
                 return true;
             }
-        } catch { }
+        } catch {
+            console.error(CONSOLE_PREFIX + "Failed to stringify and compare property stores");
+        }
         return false;
     }
 
-    // Get state (can be imported using importState, converts the maps to arrays for serialization)
-    get getState() {
+    /**
+     * Export state (can be imported using importState, converts the maps to arrays for serialization)
+     * @returns {Object}
+     */
+    get state() {
         return {
             keyOperations: [...this.#keyOperations.entries()],
             vectorClock: [...this.#vectorClock.entries()]
         };
     }
 }
-
-module.exports = { CRDTManager };

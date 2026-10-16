@@ -1,5 +1,5 @@
 import { Peer } from 'peerjs';
-import { CRDTManager } from './crdtManager';
+import CRDTManager from './crdtManager';
 
 const ERROR_PREFIX = "PlayPeer error: ";
 const WARNING_PREFIX = "PlayPeer warning: ";
@@ -63,7 +63,7 @@ export default class PlayPeer {
             "outgoingPeerError"
         ];
 
-        if (!validEvents.includes(event)) return console.warn(WARNING_PREFIX + `Invalid event type "${event}" provided to onEvent.`);
+        if (!validEvents.includes(event)) return console.warn(WARNING_PREFIX + `Invalid event type ${event} provided to onEvent`);
         if (!this.#callbacks.has(event)) this.#callbacks.set(event, []); // If not present, add event array
         this.#callbacks.get(event).push(callback); // Push callback into array
     }
@@ -87,14 +87,13 @@ export default class PlayPeer {
 
     /**
      * Initialize new multiplayer object
-     * @async
      * @returns {Promise} Async Initialization promise
     */
-    async init() {
+    init() {
         return new Promise((resolve, reject) => {
-            if (this.#peer) return reject(new Error("Instance already initialized!"));
-            if (!this.#id) return reject(ERROR_PREFIX + "No id provided!");
-            if (!this.#options) return reject(ERROR_PREFIX + "No config provided! Stun and turn servers missing.");
+            if (this.#peer) return reject(new Error("Instance already initialized"));
+            if (!this.#id) return reject(ERROR_PREFIX + "No id provided");
+            if (!this.#options) return reject(ERROR_PREFIX + "No config provided, stun and turn servers missing");
             this.#triggerEvent("status", "Initializing instance...");
 
             try {
@@ -102,7 +101,7 @@ export default class PlayPeer {
             } catch (error) {
                 console.error(ERROR_PREFIX + "Failed to initialize peer:", error);
                 this.#triggerEvent("error", "Failed to initialize peer: " + error);
-                return reject(new Error("Failed to initialize peer."));
+                return reject(new Error("Failed to initialize peer"));
             }
 
             this.#setupPeerErrorListeners(); // Attach event listeners
@@ -114,7 +113,7 @@ export default class PlayPeer {
             connectionOpenTimeout = setTimeout(() => {
                 this.#triggerEvent("error", "Connection attempt to singalling server timed out.");
                 this.destroy();
-                reject(new Error("Connection attempt to signalling server timed out."));
+                reject(new Error("Connection attempt to signalling server timed out"));
             }, 3 * 1000);
 
             this.#peer.on('open', () => {
@@ -135,7 +134,7 @@ export default class PlayPeer {
             if (this.#peer && !this.#peer?.destroyed) {
                 try {
                     this.#peer.reconnect(); // Re-connect to the signalling server – all active peer connections should stay intact!
-                    console.warn(WARNING_PREFIX + "Disconnected from signalling server. Attempting to reconnect.");
+                    console.warn(WARNING_PREFIX + "Disconnected from signalling server, attempting to reconnect");
                     this.#triggerEvent("status", "Disconnected from signalling server...");
                 } catch (error) {
                     this.#triggerEvent("error", "Failed to reconnect: " + error);
@@ -144,14 +143,14 @@ export default class PlayPeer {
         });
 
         this.#peer.on('error', (error) => {
-            this.#triggerEvent("error", `Error of type '${error?.type}': ` + error); // Don't destroy here - it's either done automatically (including on browser reload) or unnecessary
+            this.#triggerEvent("error", `Error of type ${error?.type}: ` + error); // Don't destroy here - it's either done automatically (including on browser reload) or unnecessary
         });
 
         // 'close' is triggered when the peer was destroyed either by peer.destroy() or by fatal error
         this.#peer.on('close', () => {
             this.#triggerEvent("status", "Peer permanently closed.");
             this.#triggerEvent("error", "Peer permanently closed. Please ensure your client is WebRTC-compatible.");
-            console.warn(WARNING_PREFIX + "Peer permanently closed.");
+            console.warn(WARNING_PREFIX + "Peer permanently closed");
             this.destroy(); // Clean up and trigger PlayPeer destroy event (if not already destroyed)
         });
     }
@@ -174,7 +173,7 @@ export default class PlayPeer {
     #handleIncomingConnections(incomingConnection) {
         // Check if room is full
         if (this.#isHost && this.#maxSize && (this.#hostConnections?.length + 1) >= this.#maxSize) {
-            console.warn(WARNING_PREFIX + `Connection ${incomingConnection.peer} rejected - room is full.`);
+            console.warn(WARNING_PREFIX + `Connection ${incomingConnection.peer} rejected - room is full`);
             this.#triggerEvent("status", "Rejected connection - room is full.");
             try { incomingConnection.close(); } catch (error) {
                 this.#triggerEvent("error", "Failed to close incoming connection (room full): " + error);
@@ -185,7 +184,7 @@ export default class PlayPeer {
         // Close broken connections that don't open in time or address the wrong host
         setTimeout(() => {
             if (!incomingConnection.open || !this.#isHost) {
-                console.warn(WARNING_PREFIX + `Connection ${incomingConnection?.peer} closed - ${this.#isHost ? "did not open" : "not hosting"}.`);
+                console.warn(WARNING_PREFIX + `Connection ${incomingConnection?.peer} closed - ${this.#isHost ? "did not open" : "not hosting"}`);
                 try { incomingConnection.close(); } catch (error) {
                     this.#triggerEvent("error", "Failed to close incoming connection (invalid): " + error);
                 }
@@ -208,7 +207,7 @@ export default class PlayPeer {
                     }
                     this.#hostConnections?.forEach((e) => {
                         if (e[1] < Date.now() - 3000) {
-                            console.warn(WARNING_PREFIX + "Peer did not send heartbeats - closing connection.");
+                            console.warn(WARNING_PREFIX + "Peer did not send heartbeats - closing connection");
                             this.#triggerEvent("status", "Peer did not send heartbeats - closing connection.");
                             try { e[0]?.close(); } catch (error) {
                                 this.#triggerEvent("error", "Failed to close incoming connection (no heartbeat): " + error);
@@ -229,7 +228,7 @@ export default class PlayPeer {
 
                 // Send current storage state to new peer
                 try {
-                    incomingConnection.send({ type: 'state_init', state: this.#crdtManager.getState });
+                    incomingConnection.send({ type: 'state_init', state: this.#crdtManager.state });
                 } catch (error) {
                     this.#triggerEvent("error", "Error sending initial storage sync: " + error);
                 }
@@ -243,7 +242,7 @@ export default class PlayPeer {
                         // Storage updates, sent out by clients
                         if (data.update) {
                             this.#crdtManager.importPropertyUpdate(data.update);
-                            if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", this.getStorage);
+                            if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", this.storage);
                             this.#broadcastMessage("property_update", { update: data.update });
                         }
                         break;
@@ -283,9 +282,9 @@ export default class PlayPeer {
     createRoom(initialStorage = {}, maxSize) {
         return new Promise((resolve, reject) => {
             if (!this.#peer || this.#peer.destroyed || !this.#initialized) {
-                this.#triggerEvent("error", "Cannot create room if peer is not initialized. Note that .init() is async.");
-                console.error(ERROR_PREFIX + "Cannot create room if peer is not initialized. Note that .init() is async.");
-                reject(new Error("Peer not initialized."));
+                this.#triggerEvent("error", "Cannot create room if peer is not initialized.");
+                console.error(ERROR_PREFIX + "Cannot create room if peer is not initialized (note that .init() is async)");
+                reject(new Error("Peer not initialized"));
             }
 
             // Initial storage
@@ -295,8 +294,8 @@ export default class PlayPeer {
 
             this.#isHost = true;
             this.#maxSize = maxSize; // Store the maxSize value
-            this.#triggerEvent("storageUpdated", this.getStorage);
-            this.#triggerEvent("status", `Room created${maxSize ? ` with size ${maxSize}` : ''}.`);
+            this.#triggerEvent("storageUpdated", this.storage);
+            this.#triggerEvent("status", `Room created${maxSize ? ` with size ${maxSize}` : ""}.`);
             resolve(this.#id);
         });
     }
@@ -305,12 +304,12 @@ export default class PlayPeer {
      * Join existing room (Client code)
      * @param {string} hostId - Id of the host to connect to
      */
-    async joinRoom(hostId) {
+    joinRoom(hostId) {
         return new Promise((resolve, reject) => {
             if (!this.#peer || this.#peer?.destroyed || !this.#initialized) {
-                this.#triggerEvent("error", "Cannot join room if peer is not initialized. Note that .init() is async.");
-                console.error(ERROR_PREFIX + "Cannot join room if peer is not initialized. Note that .init() is async.");
-                reject(new Error("Peer not initialized."));
+                this.#triggerEvent("error", "Cannot join room if peer is not initialized.");
+                console.error(ERROR_PREFIX + "Cannot join room if peer is not initialized (note that .init() is async)");
+                reject(new Error("Peer not initialized"));
             }
             try {
                 this.#outgoingConnection = this.#peer.connect(hostId, { reliable: true }); // Connect to host
@@ -330,7 +329,7 @@ export default class PlayPeer {
                         this.#outgoingConnection = null;
                     }
                     this.#triggerEvent("status", "Connection attempt for joining room timed out.");
-                    reject(new Error("Connection attempt for joining room timed out."));
+                    reject(new Error("Connection attempt for joining room timed out"));
                 }, 5 * 1000);
 
                 let failedHeartbeatAttempts = 0;
@@ -348,7 +347,7 @@ export default class PlayPeer {
                         if (!this.#heartbeatReceived) {
                             failedHeartbeatAttempts++;
                             if (failedHeartbeatAttempts >= 2) {
-                                console.warn(WARNING_PREFIX + "Host did not respond to heartbeat twice - disconnecting from host.");
+                                console.warn(WARNING_PREFIX + "Host did not respond to heartbeat twice - disconnecting from host");
                                 this.#triggerEvent("status", "Host did not respond to heartbeat twice - disconnecting from host.");
                                 this.#outgoingConnection?.close();
                                 return;
@@ -379,14 +378,14 @@ export default class PlayPeer {
                         case 'state_init':
                             if (data.state) {
                                 this.#crdtManager.importState(data.state);
-                                this.#triggerEvent("storageUpdated", this.getStorage);
+                                this.#triggerEvent("storageUpdated", this.storage);
                             }
                             break;
 
                         case 'property_update':
                             if (data.update) {
                                 this.#crdtManager.importPropertyUpdate(data.update);
-                                if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", this.getStorage);
+                                if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", this.storage);
                             }
                             break;
 
@@ -438,7 +437,7 @@ export default class PlayPeer {
                 this.#triggerEvent("error", "Error sending property update to host: " + error);
             }
         }
-        if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", this.getStorage);
+        if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", this.storage);
     }
 
     /**
@@ -464,7 +463,7 @@ export default class PlayPeer {
                 this.#triggerEvent("error", "Error sending property update to host: " + error);
             }
         }
-        if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", this.getStorage);
+        if (this.#crdtManager.didPropertiesChange) this.#triggerEvent("storageUpdated", this.storage);
     }
 
     /**
@@ -494,7 +493,7 @@ export default class PlayPeer {
      */
     async #migrateHost() {
         if (this.#peer.destroyed) {
-            console.warn(WARNING_PREFIX + "Can't migrate host since peer is destroyed.");
+            console.warn(WARNING_PREFIX + "Can't migrate host since peer is destroyed");
             this.#triggerEvent("error", "Can't migrate host since peer is destroyed.");
             return;
         }
@@ -557,7 +556,7 @@ export default class PlayPeer {
     }
 
     /**
-     *  @returns {number} Number of active connections to the host
+     * @returns {number} Number of active connections to the host
      */
     get connectionCount() {
         if (this.#isHost) return this.#hostConnections?.length || 0;
@@ -565,9 +564,15 @@ export default class PlayPeer {
     }
 
     /**
-     *  @returns {object} Get storage object
+     * @returns {object} Get storage object
      */
-    get getStorage() { return this.#crdtManager.getPropertyStore; }
+    get storage() { return this.#crdtManager.propertyStore; }
+
+    /**
+     * @deprecated
+     * @returns {object} Get storage object
+     */
+    get getStorage() { return this.#crdtManager.propertyStore; }
 
     /**
     *  @returns {boolean} Check if this peer is hosting
